@@ -40,6 +40,7 @@ function drawIcon(k, x, y, s) {
 // 이모지가 섞인 문자열을 그림. g.font / g.textAlign / g.fillStyle 그대로 따름.
 // shadow: 검은 그림자 오프셋(px). 텍스트에만 그림자, 아이콘은 그대로.
 function richText(str, x, y, shadow = 0) {
+  str = String(str); // 피해 숫자 등 숫자도 들어옴
   const fs = parseFloat(g.font) || 16, s = Math.round(fs * 1.15), gap = 1;
   const parts = [];
   let last = 0;

@@ -29,7 +29,7 @@ function spawn(type, x, opt) {
     let st = 1;
     while (st < 5 && R() < STAR_UP + L * 0.02) st++;
     e.star = st;
-    e.hp *= 1 + st * 0.7; e.dmg *= 1 + st * 0.12; e.sp *= 1 + st * 0.03;
+    e.hp *= 1 + st; // ★1 +100%, ★2 +200%, … ★5 +500% e.dmg *= 1 + st * 0.12; e.sp *= 1 + st * 0.03;
     e.w *= 1 + st * 0.06; e.h *= 1 + st * 0.06;
     // 특수 능력
     const af = [];
