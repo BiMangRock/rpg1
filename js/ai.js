@@ -13,11 +13,50 @@ function nearestSummon(e, range) {
   return best;
 }
 
-// 걷기. 점프 못 하는 적은 발판 끝에서 멈춤
-function stepX(e, dx) {
+// 걷기. keep = 발판 끝에서 멈춤 (거리를 두는 적이 뒷걸음질로 떨어지지 않게)
+function stepX(e, dx, keep) {
   const nx = e.x + dx;
-  if (e.plat && !e.jumper && (nx < e.plat.x + 8 || nx > e.plat.x + e.plat.w - 8)) return;
+  if (e.plat && (keep || !e.jumper) && (nx < e.plat.x + 8 || nx > e.plat.x + e.plat.w - 8)) return;
   e.x = nx;
+}
+// 발판으로 올라가는 중이면 그쪽으로 이동하고 true
+function climb(e, spd, dt) {
+  if (e.jx == null) return false;
+  const mdx = e.jx - e.x;
+  e.dir = mdx > 0 ? 1 : -1;
+  if (Math.abs(mdx) > 4) stepX(e, e.dir * Math.min(spd * dt, Math.abs(mdx)));
+  return true;
+}
+
+// ★ 몬스터 특수 능력 (매 프레임)
+function starAI(e, dt, dx) {
+  const A = e.af, mh = e.mh, cy = e.y - e.h / 2;
+  if (A.has('regen') && e.hp < mh) e.hp = Math.min(mh, e.hp + mh * 0.025 * dt);
+  if (A.has('holy') && (e.hsT -= dt) <= 0) {
+    e.hsT = 9; e.shd = mh * 0.3; e.shdT = 6;
+    wave(e.x, cy, '#6ab4ff', 120);
+  }
+  if (A.has('wave') && (e.wvT -= dt) <= 0 && Math.hypot(dx, p.y - e.y) < 650) {
+    // 용사의 검기: 3갈래
+    e.wvT = 2.6;
+    const ang = Math.atan2(p.y - 50 - (e.y - e.h * 0.6), dx);
+    for (const o of [-0.14, 0, 0.14])
+      eb.push({ x: e.x, y: e.y - e.h * 0.6, vx: Math.cos(ang + o) * 380, vy: Math.sin(ang + o) * 380, life: 2.5, d: e.dmg * 0.7, r: 12, c: '#9ad8ff' });
+  }
+  if (A.has('blink') && (e.blT -= dt) <= 0 && Math.hypot(dx, p.y - e.y) > 420) {
+    e.blT = 6;
+    wave(e.x, cy, '#c08aff', 90);
+    e.x = cl(p.x + (R() < 0.5 ? -1 : 1) * rr(120, 180), 20, WW - 20); e.y = p.y - 10; e.vy = 0;
+    wave(e.x, e.y - e.h / 2, '#c08aff', 90);
+  }
+  if (e.hp < mh * 0.5) {
+    if (A.has('rage') && !e.rg) { e.rg = 1; txt(e.x, e.y - e.h - 30, '광폭!', '#ff4a4a'); }
+    if (A.has('call') && !e.called) {
+      e.called = 1;
+      txt(e.x, e.y - e.h - 30, '호출!', '#ffa040');
+      for (const d of [-1, 1]) spawn(pickR(stageDef().pool), cl(e.x + d * 70, 20, WW - 20), { y: e.y, nostar: 1 });
+    }
+  }
 }
 
 function updEnemies(dt) {
@@ -44,7 +83,8 @@ function updEnemies(dt) {
     }
     if (e.slow > 0) e.slow -= dt;
     const dx = p.x - e.x, ai = e.D.ai;
-    const spd = e.sp * (e.bf > 0 ? 1.5 : 1), dmg = e.dmg * (e.bf > 0 ? 1.4 : 1);
+    if (e.af) starAI(e, dt, dx);
+    const spd = e.sp * (e.bf > 0 ? 1.5 : 1) * (e.rg ? 1.3 : 1), dmg = e.dmg * (e.bf > 0 ? 1.4 : 1) * (e.rg ? 1.5 : 1);
 
     if (e.t === 'boss') bossAI(e, e.slow > 0 ? dt * 0.5 : dt, dx);
     else if (ai === 'crystal') { /* 제자리 */ }
@@ -59,20 +99,24 @@ function updEnemies(dt) {
     } else if (ai === 'support') {
       // 지원형: 플레이어와 거리를 두고 주기적으로 스킬 사용
       const ad = Math.abs(dx);
-      e.dir = dx > 0 ? 1 : -1;
-      stepX(e, (ad < 260 ? -e.dir : ad > 380 ? e.dir : 0) * spd * dt);
+      chaseJump(e, dt, p.x, p.y, e.jp);
+      if (!climb(e, spd, dt)) {
+        e.dir = dx > 0 ? 1 : -1;
+        stepX(e, (ad < 260 ? -e.dir : ad > 380 ? e.dir : 0) * spd * dt, true);
+      }
       e.cd -= dt;
       if (e.cd <= 0 && ad < 700) support(e);
     } else {
       // 근접형 / 궁수: 가까운 소환수가 있으면 그쪽을 노림
       const a = nearestSummon(e, Math.min(320, Math.abs(dx) + Math.abs(p.y - e.y) * 1.5));
       const tdx = (a ? a.x : p.x) - e.x;
-      if (e.jumper) chaseJump(e, dt, a ? a.x : p.x, a ? a.y : p.y, 980);
-      else e.jx = null;
+      chaseJump(e, dt, a ? a.x : p.x, a ? a.y : p.y, e.jp);
       if (ai === 'archer') {
         const ty = a ? a.y - a.h / 2 : p.y - 50, ad = Math.abs(tdx);
-        e.dir = tdx > 0 ? 1 : -1;
-        stepX(e, (ad < 240 ? -e.dir : ad > 340 ? e.dir : 0) * spd * dt);
+        if (!climb(e, spd, dt)) {
+          e.dir = tdx > 0 ? 1 : -1;
+          stepX(e, (ad < 240 ? -e.dir : ad > 340 ? e.dir : 0) * spd * dt, true);
+        }
         e.sh -= dt * (e.bf > 0 ? 1.5 : 1);
         if (e.sh <= 0 && ad < 520) {
           e.sh = 2.2;
@@ -80,12 +124,7 @@ function updEnemies(dt) {
           eb.push({ x: e.x, y: e.y - 45, vx: Math.cos(ang) * 280, vy: Math.sin(ang) * 280, life: 3, d: dmg, ar: 1 });
         }
       } else {
-        if (e.jx != null) {
-          // 발판으로 올라가는 중
-          const mdx = e.jx - e.x;
-          e.dir = mdx > 0 ? 1 : -1;
-          if (Math.abs(mdx) > 4) stepX(e, e.dir * Math.min(spd * dt, Math.abs(mdx)));
-        } else {
+        if (!climb(e, spd, dt)) {
           e.dir = tdx > 0 ? 1 : -1;
           if (!a || Math.abs(tdx) > (e.w + a.w) / 2 - 8) stepX(e, e.dir * spd * dt);
         }

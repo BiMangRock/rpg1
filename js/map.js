@@ -128,10 +128,10 @@ function body(o, dt) {
   o.y += o.vy * dt;
   o.g = 0;
   if (o.dn > 0) o.dn -= dt;
-  if (o.y >= GY) { o.y = GY; o.vy = 0; o.g = 1; o.plat = null; return; }
+  if (o.y >= GY) { o.y = GY; o.vy = 0; o.g = 1; o.plat = null; o.airJ = o.mAir || 0; return; }
   if (o.vy > 0 && !(o.dn > 0))
     for (const q of pl)
-      if (o.x > q.x && o.x < q.x + q.w && py <= q.y && o.y >= q.y) { o.y = q.y; o.vy = 0; o.g = 1; o.plat = q; return; }
+      if (o.x > q.x && o.x < q.x + q.w && py <= q.y && o.y >= q.y) { o.y = q.y; o.vy = 0; o.g = 1; o.plat = q; o.airJ = o.mAir || 0; return; }
   o.plat = null;
 }
 
@@ -139,7 +139,14 @@ function body(o, dt) {
 // o.jx: 지금 향해야 할 x (없으면 목표를 그대로 쫓음)
 function chaseJump(o, dt, tx, ty, power) {
   o.jt = (o.jt || 0) - dt;
-  if (!o.g) return; // 공중에서는 정해둔 방향 유지
+  if (!o.g) {
+    // 다단 점프 (★ 몬스터): 공중에서 한 번 더
+    if (o.airJ > 0 && ty < o.y - 60 && o.vy > -150) {
+      o.vy = -760; o.airJ--;
+      fx.push({ a: [FR.flash[0]], x: o.x, y: o.y, d: 0.12, sz: 70, f: 1, t: 0 });
+    }
+    return; // 공중에서는 정해둔 방향 유지
+  }
   o.jx = null;
   if (ty < o.y - 50) {
     const maxH = (power * power) / 3400 - 15;
@@ -156,7 +163,7 @@ function chaseJump(o, dt, tx, ty, power) {
     o.jx = cl(tx, best.x + 20, best.x + best.w - 20);
     if (o.jt <= 0 && Math.abs(cl(o.x, best.x, best.x + best.w) - o.x) < 110) {
       o.vy = -Math.min(power, Math.sqrt(3400 * (o.y - best.y + 40)));
-      o.jt = 0.7; o.g = 0;
+      o.jt = o.jcd || 0.7; o.g = 0;
     }
   } else if (ty > o.y + 50 && o.plat && Math.abs(tx - o.x) < 260 && o.jt <= 0) {
     o.dn = 0.3; o.y += 4; o.g = 0; o.jt = 0.5;

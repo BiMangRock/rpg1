@@ -21,6 +21,12 @@ const STAR_CHANCE = 0.07;    // 기본 등장 확률 (스테이지가 깊어질�
 const STAR_UP = 0.35;        // 한 단계 더 높은 별이 붙을 확률 (깊어질수록 증가)
 const STAR_ITEM = 0.06;      // 별 1개당 장비 드롭 확률
 const CHEST_CHANCE = 0.4;    // 스테이지에 보물상자가 나올 확률
+// ★ 몬스터 특수 능력: ★2는 랜덤 1개, ★3부터 '용사의 갑옷', ★4부터 '다단 점프', ★5는 '용사의 검기' 고정 + 랜덤
+const AFFIX = {
+  armor: '용사갑옷', jump: '다단점프', wave: '용사검기', haste: '신속', regen: '재생',
+  holy: '성방패', blink: '순간이동', split: '분열', rage: '광폭', call: '호출',
+};
+const AFFIX_RANDOM = ['haste', 'regen', 'holy', 'blink', 'split', 'rage', 'call', 'jump'];
 
 // ----- 월드 / 스테이지 -----
 // 월드마다 일반 스테이지 5개 + 마지막 보스 스테이지
@@ -52,17 +58,17 @@ const WORLDS = [
 
 // ----- 적 -----
 // hp/sp(속도)/w/h/dm(공격 배율)/xp/gold, look: 외형 번호, ai: 행동 방식, cd: 지원 스킬 쿨타임
-// jump: 1 = 항상 발판으로 점프해서 추격, 2 = 2월드부터 점프 추격
+// (지상 적은 모두 발판을 뛰어오르내리며 추격. 2월드 적이 더 높이, 자주 점프)
 const ENEMY = {
   farmer:    { hp: 24,  sp: 60,  w: 32, h: 66, dm: 1,   xp: 2, gold: 2, col: '#8a6a3a', look: 0 },
   villager:  { hp: 16,  sp: 100, w: 30, h: 62, dm: 0.8, xp: 1, gold: 2, col: '#6a8aa8', look: 1 },
-  swordsman: { hp: 60,  sp: 75,  w: 36, h: 76, dm: 1.6, xp: 4, gold: 4, col: '#8a8f9a', look: 2, jump: 2 },
+  swordsman: { hp: 60,  sp: 75,  w: 36, h: 76, dm: 1.6, xp: 4, gold: 4, col: '#8a8f9a', look: 2 },
   archer:    { hp: 28,  sp: 55,  w: 32, h: 68, dm: 0.9, xp: 3, gold: 3, col: '#3a7a4a', look: 3, ai: 'archer' },
   paladin:   { hp: 130, sp: 40,  w: 46, h: 84, dm: 1.8, xp: 7, gold: 6, col: '#dcdce8', look: 4 },
   // --- 2월드 지원형 ---
   cleric:    { hp: 45,  sp: 55,  w: 32, h: 70, dm: 0.8, xp: 5, gold: 5, col: '#efe9da', look: 5, ai: 'support', cd: 3.2, role: ['✚', '#7aff8a', '성직자'] },
   bard:      { hp: 40,  sp: 60,  w: 32, h: 68, dm: 0.8, xp: 5, gold: 5, col: '#d0602a', look: 6, ai: 'support', cd: 6,   role: ['♪', '#ffa040', '군악 사제'] },
-  zealot:    { hp: 50,  sp: 125, w: 32, h: 70, dm: 1.3, xp: 5, gold: 5, col: '#3a2a48', look: 9, jump: 1 },
+  zealot:    { hp: 50,  sp: 125, w: 32, h: 70, dm: 1.3, xp: 5, gold: 5, col: '#3a2a48', look: 9 },
   summoner:  { hp: 50,  sp: 45,  w: 34, h: 72, dm: 0.8, xp: 6, gold: 6, col: '#5a2a90', look: 7, ai: 'support', cd: 5,   role: ['◆', '#c08aff', '소환술사'] },
   warden:    { hp: 70,  sp: 45,  w: 38, h: 74, dm: 1,   xp: 6, gold: 6, col: '#3a5ab0', look: 8, ai: 'support', cd: 5,   role: ['⬡', '#7ac0ff', '수호 사제'] },
   // --- 소환물 / 보스 기믹 ---

@@ -19,15 +19,28 @@ function spawn(type, x, opt) {
     shd: 0, shdT: 0, bf: 0, cast: 0, frz: 0, burnT: 0, psnT: 0, psnS: 0,
   };
   if (D.fly) e.y -= rr(90, 170);
-  // 발판 점프 추격: jump 1 = 항상, 2 = 2월드부터
-  e.jumper = D.jump === 1 || (D.jump === 2 && cur.w >= 1);
+  // 지상 적은 모두 발판 점프 추격 (2월드가 더 높고 자주)
+  e.jumper = !D.fly && D.ai !== 'crystal';
+  e.jp = cur.w >= 1 ? 980 : 880; e.jcd = cur.w >= 1 ? 0.7 : 1.1;
   // ★ 몬스터: 일반 적이 가끔 ★1~5로 등장. 별이 많을수록 강하고 보상이 큼
-  if (!opt?.owner && !D.minion && D.ai !== 'crystal' && !isBossStage() && R() < STAR_CHANCE * (1 + L * 0.06) * (1 + T.luck)) {
+  if (!opt?.owner && !opt?.nostar && !D.minion && D.ai !== 'crystal' && !isBossStage() && R() < STAR_CHANCE * (1 + L * 0.06) * (1 + T.luck)) {
     let st = 1;
     while (st < 5 && R() < STAR_UP + L * 0.02) st++;
     e.star = st;
     e.hp *= 1 + st * 0.7; e.dmg *= 1 + st * 0.12; e.sp *= 1 + st * 0.03;
     e.w *= 1 + st * 0.06; e.h *= 1 + st * 0.06;
+    // 특수 능력
+    const af = [];
+    if (st >= 3) af.push('armor');
+    if (st >= 4) af.push('jump');
+    if (st >= 5) af.push('wave');
+    const pool = shuffle(AFFIX_RANDOM.filter((a) => !af.includes(a)));
+    while (af.length < st - 1 + (st >= 5 ? 1 : 0)) af.push(pool.shift());
+    e.af = new Set(af);
+    if (e.af.has('armor')) e.dr = 0.35;               // 받는 피해 -35%, 넉백 무시
+    if (e.af.has('haste')) e.sp *= 1.6;
+    if (e.af.has('jump')) { e.mAir = 2; e.jp += 120; e.jcd = 0.4; } // 공중에서 2번 더 점프
+    e.wvT = 2; e.hsT = 1; e.blT = 3;
   }
   Object.assign(e, opt);
   e.mh = e.hp;
@@ -100,6 +113,7 @@ function hit(e, d, k, crit, src) {
   if (e.dead) return 0;
   if (e.inv > 0) { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
   if (crit) d *= 2 + T.critx;
+  if (e.dr) d *= 1 - e.dr;
   if (e.frz > 0 && T.frzB) d *= 1 + T.frzB;
   if (e.shd > 0) {
     const a = Math.min(e.shd, d);
@@ -109,7 +123,7 @@ function hit(e, d, k, crit, src) {
   }
   e.hp -= d;
   if (src !== 'burn' && src !== 'psn') e.fl = 0.12;
-  if (e.t !== 'boss' && e.D.ai !== 'crystal' && !(e.frz > 0)) e.kx += k;
+  if (e.t !== 'boss' && e.D.ai !== 'crystal' && !(e.frz > 0) && !e.af?.has('armor')) e.kx += k;
   txt(e.x, e.y - e.h - 6, Math.round(d) + (crit ? '!' : ''), crit ? '#ffd84a' : DMG_COL[src] || '#fff');
   // 적중 효과 (검/마법/소환수)
   if (src === 'sw' || src === 'mg' || src === 'sm') {
@@ -137,6 +151,12 @@ function kill(e) {
   // ★ 몬스터는 장비를 떨어뜨릴 수 있음
   if (st && R() < st * STAR_ITEM * (1 + T.luck * 0.8)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
   if (st >= 3) txt(e.x, e.y - e.h - 30, '★'.repeat(st) + ' 처치!', '#ffd24a');
+  // 분열: 죽으면 작은 분신 2마리
+  if (e.af?.has('split'))
+    for (const d of [-1, 1]) {
+      const c = spawn(e.t, cl(e.x + d * 24, 20, WW - 20), { y: e.y, nostar: 1 });
+      c.hp = c.mh = c.mh * 0.6; c.kx = d * 200;
+    }
 }
 
 // 아직 없는 장비 중 하나 (bonus: 한 등급 위까지 허용)

@@ -79,6 +79,7 @@ function drawE(e) {
   // 버프 / 시전 이펙트 (뒤쪽)
   g.save(); g.globalCompositeOperation = 'lighter';
   if (e.star) glow(sx, e.y - h * 0.5, h * (0.6 + e.star * 0.12), e.star >= 4 ? '255,90,60' : '255,200,60', 0.2 + e.star * 0.05 + 0.1 * Math.sin(time * 5));
+  if (e.rg) glow(sx, e.y - h * 0.5, h * 0.8, '255,40,40', 0.35 + 0.15 * Math.sin(time * 15));
   if (e.bf > 0) glow(sx, e.y - h * 0.4, h * 0.8, '255,150,60', 0.35 + 0.15 * Math.sin(time * 12));
   if (e.cast > 0 && e.D.role) glow(sx, e.y - h * 0.6, 60, hexRgb(e.D.role[1]), e.cast);
   g.restore();
@@ -133,6 +134,15 @@ function drawE(e) {
     S2('#dfe6ee'); g.lineWidth = 4; g.moveTo(w * 0.4, -h * 0.5); g.lineTo(w * 0.9, -h * (0.95 + wk * 0.1)); g.stroke();
     if (k === 4) { P('#c9a227'); g.fillRect(w * 0.28, -h * 0.72, w * 0.3, h * 0.4); }
   }
+  // ★ 몬스터: 용사의 갑옷 (금빛 견갑·투구 장식), 용사의 검 (빛나는 대검)
+  if (e.af?.has('armor')) {
+    P('#c9a227'); g.fillRect(-w * 0.48, -h * 0.78, w * 0.96, h * 0.08); g.fillRect(-w * 0.12, -h * 0.74, w * 0.24, h * 0.3);
+    P('#e01830'); g.fillRect(-3, -h * 1.16, 6, h * 0.12);
+  }
+  if (e.af?.has('wave')) {
+    S2('#e8f2ff'); g.lineWidth = 6; g.beginPath(); g.moveTo(w * 0.3, -h * 0.45); g.lineTo(w * 1.1, -h * 1.2); g.stroke();
+    S2('#c9a227'); g.lineWidth = 4; g.beginPath(); g.moveTo(w * 0.2, -h * 0.52); g.lineTo(w * 0.5, -h * 0.4); g.stroke();
+  }
   g.restore();
   drawStatus(e);
 }
@@ -159,6 +169,12 @@ function drawStatus(e) {
     g.font = '14px "Do Hyeon",sans-serif'; g.textAlign = 'center';
     g.fillStyle = '#000'; g.fillText(s, sx + 1, e.y - e.h - 27);
     g.fillStyle = e.star >= 4 ? '#ff7a4a' : '#ffd24a'; g.fillText(s, sx, e.y - e.h - 28);
+    if (e.af?.size) {
+      const t = [...e.af].map((a) => AFFIX[a]).join(' · ');
+      g.font = '11px "Do Hyeon",sans-serif';
+      g.fillStyle = '#000'; g.fillText(t, sx + 1, e.y - e.h - 43);
+      g.fillStyle = '#ffe0a0'; g.fillText(t, sx, e.y - e.h - 44);
+    }
     g.textAlign = 'left';
   }
   if (e.shd > 0) {
@@ -490,6 +506,7 @@ function hud() {
   g.fillText(`${gold} G`, W - 16, 30);
   if (relics.length) { g.font = '14px "Do Hyeon",sans-serif'; g.fillStyle = '#c88aff'; g.fillText(`유물 ${relics.length}개`, W - 16, 50); }
   g.textAlign = 'left';
+  if (!boss) minimap();
   if (boss) {
     bar(W / 2 - 220, 16, 440, 14, boss.hp / boss.mh, '#a020c0');
     if (boss.shd > 0) { g.fillStyle = '#8ac8ff'; g.fillRect(W / 2 - 220, 31, 440 * cl(boss.shd / boss.mh, 0, 1), 3); }
@@ -516,4 +533,33 @@ function hud() {
     g.fillStyle = '#ffb347'; g.fillText(ban.s, W / 2, 180);
     g.globalAlpha = 1; g.textAlign = 'left';
   }
+}
+
+// ----- 미니맵 (오른쪽 위): 발판, 적(★은 금색), 포털, 보물상자, 화면 범위 -----
+function minimap() {
+  const BW = 190, BH = 120, sc = Math.min(BW / WW, BH / MH);
+  const mw = WW * sc, mh = MH * sc, x0 = W - 16 - mw, y0 = 60;
+  const X = (x) => x0 + x * sc, Y = (y) => y0 + y * sc;
+  g.fillStyle = 'rgba(10,6,16,.72)'; g.fillRect(x0 - 4, y0 - 4, mw + 8, mh + 8);
+  g.strokeStyle = '#ffffff33'; g.lineWidth = 1; g.strokeRect(x0 - 3.5, y0 - 3.5, mw + 7, mh + 7);
+  // 땅 / 발판
+  g.fillStyle = stageDef().e + '99';
+  g.fillRect(x0, Y(GY), mw, 2);
+  for (const q of pl) g.fillRect(X(q.x), Y(q.y), Math.max(2, q.w * sc), 1.5);
+  // 화면 범위
+  g.strokeStyle = '#ffffff55'; g.strokeRect(X(cam) + 0.5, Y(camY) + 0.5, W * sc, H * sc);
+  // 보물상자
+  for (const c of chests) if (!c.open) { g.fillStyle = '#ffd24a'; g.fillRect(X(c.x) - 2, Y(c.y) - 4, 5, 4); }
+  // 포털 (열리기 전엔 흐리게)
+  const pp = portal || map.portal;
+  g.fillStyle = portal ? `rgba(180,130,255,${0.7 + 0.3 * Math.sin(time * 6)})` : '#8a5aff55';
+  g.beginPath(); g.ellipse(X(pp.x), Y(pp.y - 30), 3, 5, 0, 0, 7); g.fill();
+  // 적
+  for (const e of en) {
+    if (e.star) { g.fillStyle = e.star >= 4 ? '#ff7a4a' : '#ffd24a'; g.fillRect(X(e.x) - 2, Y(e.y - e.h / 2) - 2, 4, 4); }
+    else { g.fillStyle = '#ff5a6a'; g.fillRect(X(e.x) - 1, Y(e.y - e.h / 2) - 1, 2, 2); }
+  }
+  // 소환수 / 플레이어
+  g.fillStyle = '#b06aff'; for (const a of al) g.fillRect(X(a.x) - 1, Y(a.y - 10) - 1, 2, 2);
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(X(p.x), Y(p.y - 40), 2.6, 0, 7); g.fill();
 }
