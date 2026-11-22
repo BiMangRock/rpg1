@@ -12,27 +12,33 @@ const MAG_CD = 0.7; // 마법 기본 쿨타임(초)
 const SCD = 12;     // 소환 기본 쿨타임(초)
 const MAXA = 12;    // 소환수 최대 수
 const POTION_PRICE = 40;
-const REROLL_PRICE = 20;
+const REROLL_PRICE = 20;  // 새로고침 비용 (같은 상점에서 누를 때마다 +10)
+const SHOP_SIZE = 5;      // 상점 진열 수
+const ELITE_CHANCE = 0.1; // 각 월드 3번째 스테이지부터 정예 등장 확률
 
 // ----- 월드 / 스테이지 -----
-// 월드마다 일반 스테이지 3개 + 보스 스테이지 1개 (4번째 = 보스)
+// 월드마다 일반 스테이지 5개 + 마지막 보스 스테이지
 // a/b: 하늘 그라데이션, e: 땅/발판 강조색, q: 포털이 열리는 처치 수, pool: 등장하는 적
 const WORLDS = [
   {
-    n: '인간 왕국', boss: 'hero', tier: 1,
+    n: '인간 왕국', boss: 'hero',
     stages: [
       { n: '평화로운 마을', a: '#2b1240', b: '#0d0616', e: '#5ad06b', q: 10, pool: ['farmer', 'villager'] },
-      { n: '국경 초소', a: '#3a1a2a', b: '#10060c', e: '#d0a05a', q: 14, pool: ['farmer', 'villager', 'swordsman', 'archer'] },
-      { n: '왕국의 성하', a: '#43121f', b: '#12060a', e: '#e8685a', q: 18, pool: ['swordsman', 'archer', 'paladin', 'farmer'] },
+      { n: '밀밭 언덕', a: '#3a2a14', b: '#100a04', e: '#e8c05a', q: 12, pool: ['farmer', 'villager', 'archer'] },
+      { n: '국경 초소', a: '#3a1a2a', b: '#10060c', e: '#d0a05a', q: 15, pool: ['farmer', 'villager', 'swordsman', 'archer'] },
+      { n: '기사단 훈련장', a: '#1a2238', b: '#060812', e: '#a0b0d0', q: 18, pool: ['swordsman', 'archer', 'paladin', 'villager'] },
+      { n: '왕국의 성하', a: '#43121f', b: '#12060a', e: '#e8685a', q: 22, pool: ['swordsman', 'archer', 'paladin', 'farmer'] },
       { n: '용사의 성전', a: '#122244', b: '#050818', e: '#6ab4ff' },
     ],
   },
   {
-    n: '성교국', boss: 'pope', tier: 2,
+    n: '성교국', boss: 'pope',
     stages: [
       { n: '순례자의 길', a: '#2a2a10', b: '#0c0c04', e: '#e8d87a', q: 16, pool: ['swordsman', 'archer', 'cleric', 'bard'] },
-      { n: '침묵의 수도원', a: '#14282a', b: '#050c0c', e: '#7ae8d8', q: 20, pool: ['paladin', 'archer', 'cleric', 'warden', 'summoner'] },
-      { n: '대성당 회랑', a: '#2a1a3a', b: '#0a0612', e: '#c8a0ff', q: 24, pool: ['paladin', 'swordsman', 'cleric', 'bard', 'warden', 'summoner'] },
+      { n: '빛의 묘지', a: '#1a1a2a', b: '#06060c', e: '#b0c0ff', q: 18, pool: ['archer', 'paladin', 'summoner', 'cleric'] },
+      { n: '침묵의 수도원', a: '#14282a', b: '#050c0c', e: '#7ae8d8', q: 21, pool: ['paladin', 'archer', 'cleric', 'warden', 'summoner'] },
+      { n: '성가대 종탑', a: '#2a1420', b: '#0c0408', e: '#ff9ac0', q: 24, pool: ['swordsman', 'bard', 'warden', 'summoner', 'archer'] },
+      { n: '대성당 회랑', a: '#2a1a3a', b: '#0a0612', e: '#c8a0ff', q: 28, pool: ['paladin', 'swordsman', 'cleric', 'bard', 'warden', 'summoner'] },
       { n: '대성당 제단', a: '#3a3020', b: '#100c06', e: '#ffe6a0' },
     ],
   },
@@ -79,48 +85,70 @@ const UPGRADES = [
 //  퍼센트 증가: atk as spd mp area xpm mag sm gold   (0.15 = +15%)
 //  쿨타임 감소: cdr scd                              (0.2  = -20%)
 //  더하기:     maxhp multi ls mj sn crit vamp dr thorns revive
-//    crit: 치명타 확률(피해 2배) / vamp: 검 피해 흡혈 비율 / dr: 받는 피해 감소(음수면 증가)
-//    thorns: 닿은 적에게 공격력×값 반격 / revive: 스테이지마다 1회 부활
-const SLOT = { wpn: '무기', arm: '갑옷', acc: '장신구' };
+//    crit: 치명타 확률 / critx: 치명타 배율 추가(기본 2배) / vamp: 검 피해 흡혈 비율
+//    dr: 받는 피해 감소(음수면 증가) / thorns: 닿은 적에게 공격력×값 반격 / revive: 스테이지마다 부활 횟수
+//  특수 효과:
+//    frz: 검·마법 적중 시 빙결 확률 (보스는 둔화) / frzT: 빙결 시간 추가(초) / frzB: 빙결된 적에게 추가 피해
+//    sfrz: 소환수 공격 빙결 확률 / frzA: 피격 시 주변 적 빙결 (쿨 4초)
+//    burn: 마법 폭발이 3초간 불태움 (초당 공격력×값) / psn: 검 적중 시 독 중첩 (최대 5, 중첩당 초당 공격력×값)
+//    chain: 마법 폭발 시 주변 적에게 연쇄 번개 (명 수) / swave: 검을 휘두르면 관통 검기 (공격력×값)
+//    exe: 체력이 이 비율 이하인 일반 적 즉사 / kboom: 적 처치 시 폭발 (공격력×값)
+const SLOT = { wpn: '무기', arm: '갑옷', acc: '장신구' };              // 아이템 종류
+const EQ_SLOTS = { wpn: '무기', arm: '갑옷', acc1: '장신구 1', acc2: '장신구 2' }; // 장착 칸
+const TIER_NAME = ['', '일반', '희귀', '전설'];
 
 const ITEMS = [
-  // 무기
-  { id: 'rust',    slot: 'wpn', tier: 1, price: 60,  n: '녹슨 마검',      d: '공격력 +15%', m: { atk: 0.15 } },
-  { id: 'grim',    slot: 'wpn', tier: 1, price: 90,  n: '심연의 마도서',  d: '마법 위력 +35%', m: { mp: 0.35 } },
-  { id: 'vampsw',  slot: 'wpn', tier: 1, price: 140, n: '흡혈 대검',      d: '공격력 +20%, 검 피해의 6% 흡혈', m: { atk: 0.2, vamp: 0.06 } },
-  { id: 'split',   slot: 'wpn', tier: 1, price: 160, n: '분열의 지팡이',  d: '마법구체 +1, 마법 위력 +10%', m: { multi: 1, mp: 0.1 } },
-  { id: 'scepter', slot: 'wpn', tier: 2, price: 200, n: '군주의 홀',      d: '소환수 +2, 소환수 강화 +30%', m: { sn: 2, sm: 0.3 } },
-  { id: 'axe',     slot: 'wpn', tier: 2, price: 230, n: '광폭의 도끼',    d: '공격력 +45%, 공격 속도 +15%, 받는 피해 +15%', m: { atk: 0.45, as: 0.15, dr: -0.15 } },
-  { id: 'lance',   slot: 'wpn', tier: 2, price: 280, n: '종말의 마창',    d: '공격력 +30%, 마법 위력 +30%, 치명타 +10%', m: { atk: 0.3, mp: 0.3, crit: 0.1 } },
-  // 갑옷
-  { id: 'cloak',   slot: 'arm', tier: 1, price: 50,  n: '가죽 망토',      d: '최대 HP +25', m: { maxhp: 25 } },
-  { id: 'windc',   slot: 'arm', tier: 1, price: 100, n: '바람의 외투',    d: '이동 속도 +15%, 점프 +1단', m: { spd: 0.15, mj: 1 } },
-  { id: 'iron',    slot: 'arm', tier: 1, price: 130, n: '흑철 갑옷',      d: '최대 HP +50, 받는 피해 -10%', m: { maxhp: 50, dr: 0.1 } },
-  { id: 'robe',    slot: 'arm', tier: 2, price: 170, n: '피의 로브',      d: '최대 HP +30, 처치 시 HP +3', m: { maxhp: 30, ls: 3 } },
-  { id: 'thorn',   slot: 'arm', tier: 2, price: 220, n: '가시 갑주',      d: '최대 HP +40, 받는 피해 -15%, 몸에 닿은 적에게 반격', m: { maxhp: 40, dr: 0.15, thorns: 2 } },
-  { id: 'dragon',  slot: 'arm', tier: 2, price: 300, n: '용린 갑주',      d: '최대 HP +100, 받는 피해 -20%', m: { maxhp: 100, dr: 0.2 } },
-  // 장신구
-  { id: 'coin',    slot: 'acc', tier: 1, price: 60,  n: '행운의 동전',    d: '골드 획득 +40%', m: { gold: 0.4 } },
-  { id: 'sage',    slot: 'acc', tier: 1, price: 90,  n: '현자의 반지',    d: '경험치 +30%, 아이템 자석 +60%', m: { xpm: 0.3, mag: 0.6 } },
-  { id: 'hunter',  slot: 'acc', tier: 1, price: 140, n: '사냥꾼의 목걸이', d: '치명타 확률 +15% (피해 2배)', m: { crit: 0.15 } },
-  { id: 'hourear', slot: 'acc', tier: 2, price: 170, n: '시간의 귀걸이',  d: '마법·소환 쿨타임 -20%', m: { cdr: 0.2, scd: 0.2 } },
-  { id: 'soul',    slot: 'acc', tier: 2, price: 180, n: '영혼의 부적',    d: '소환수 강화 +50%, 소환수 +1', m: { sm: 0.5, sn: 1 } },
-  { id: 'storm',   slot: 'acc', tier: 2, price: 210, n: '폭풍의 인장',    d: '공격 속도 +25%, 폭발 범위 +25%', m: { as: 0.25, area: 0.25 } },
+  // ===== 무기 =====
+  { id: 'rust',    slot: 'wpn', tier: 1, price: 50,  n: '녹슨 마검',      d: '공격력 +25%', m: { atk: 0.25 } },
+  { id: 'grim',    slot: 'wpn', tier: 1, price: 80,  n: '심연의 마도서',  d: '마법 위력 +50%', m: { mp: 0.5 } },
+  { id: 'vampsw',  slot: 'wpn', tier: 1, price: 120, n: '흡혈 대검',      d: '공격력 +30%, 검 피해의 8% 흡혈', m: { atk: 0.3, vamp: 0.08 } },
+  { id: 'frostpk', slot: 'wpn', tier: 2, price: 180, n: '서리 송곳',      d: '공격력 +25%, 적중 시 20% 확률로 ❄빙결 (1.5초 정지)', m: { atk: 0.25, frz: 0.2 } },
+  { id: 'flame',   slot: 'wpn', tier: 2, price: 170, n: '화염 지팡이',    d: '마법 위력 +40%, 마법 폭발이 3초간 🔥불태움 (초당 공격력 80%)', m: { mp: 0.4, burn: 0.8 } },
+  { id: 'venom',   slot: 'wpn', tier: 2, price: 160, n: '맹독 단검',      d: '공격 속도 +30%, 검 적중 시 ☠독 중첩 (최대 5, 중첩당 초당 공격력 35%)', m: { as: 0.3, psn: 0.35 } },
+  { id: 'split',   slot: 'wpn', tier: 2, price: 200, n: '분열의 지팡이',  d: '마법구체 +2, 마법 위력 +15%', m: { multi: 2, mp: 0.15 } },
+  { id: 'wavesw',  slot: 'wpn', tier: 2, price: 220, n: '검기의 대검',    d: '공격력 +30%, 검을 휘두르면 적을 관통하는 검기 발사 (공격력 150%)', m: { atk: 0.3, swave: 1.5 } },
+  { id: 'thunder', slot: 'wpn', tier: 3, price: 320, n: '뇌신의 홀',      d: '마법 위력 +60%, 폭발 시 ⚡연쇄 번개가 주변 적 4명 타격', m: { mp: 0.6, chain: 4 } },
+  { id: 'zero',    slot: 'wpn', tier: 3, price: 380, n: '절대영도',       d: '공격력 +50%, 빙결 확률 +35%, 빙결된 적에게 피해 +60%', m: { atk: 0.5, frz: 0.35, frzB: 0.6 } },
+  { id: 'scythe',  slot: 'wpn', tier: 3, price: 400, n: '마왕의 대낫',    d: '공격력 +80%, 체력 20% 이하 일반 적 즉사, 처치 시 HP +5', m: { atk: 0.8, exe: 0.2, ls: 5 } },
+  { id: 'scepter', slot: 'wpn', tier: 3, price: 300, n: '군주의 홀',      d: '소환수 +3, 소환수 강화 +60%, 소환수 공격 15% 빙결', m: { sn: 3, sm: 0.6, sfrz: 0.15 } },
+  // ===== 갑옷 =====
+  { id: 'cloak',   slot: 'arm', tier: 1, price: 50,  n: '가죽 망토',      d: '최대 HP +40', m: { maxhp: 40 } },
+  { id: 'windc',   slot: 'arm', tier: 1, price: 90,  n: '바람의 외투',    d: '이동 속도 +20%, 점프 +1단', m: { spd: 0.2, mj: 1 } },
+  { id: 'iron',    slot: 'arm', tier: 1, price: 120, n: '흑철 갑옷',      d: '최대 HP +60, 받는 피해 -12%', m: { maxhp: 60, dr: 0.12 } },
+  { id: 'frostar', slot: 'arm', tier: 2, price: 190, n: '서리 갑주',      d: '최대 HP +50, 받는 피해 -15%, 맞으면 주변 적 ❄빙결', m: { maxhp: 50, dr: 0.15, frzA: 1 } },
+  { id: 'robe',    slot: 'arm', tier: 2, price: 170, n: '피의 로브',      d: '최대 HP +40, 처치 시 HP +4, 검 흡혈 5%', m: { maxhp: 40, ls: 4, vamp: 0.05 } },
+  { id: 'thorn',   slot: 'arm', tier: 2, price: 200, n: '가시 갑주',      d: '최대 HP +60, 받는 피해 -15%, 닿은 적에게 공격력 300% 반격', m: { maxhp: 60, dr: 0.15, thorns: 3 } },
+  { id: 'dragon',  slot: 'arm', tier: 3, price: 340, n: '용린 갑주',      d: '최대 HP +150, 받는 피해 -25%', m: { maxhp: 150, dr: 0.25 } },
+  { id: 'phoenix', slot: 'arm', tier: 3, price: 360, n: '불사조 망토',    d: '최대 HP +60, 스테이지마다 1번 부활, 마법 폭발 🔥화상', m: { maxhp: 60, revive: 1, burn: 0.5 } },
+  // ===== 장신구 (2칸까지 장착) =====
+  { id: 'coin',    slot: 'acc', tier: 1, price: 60,  n: '행운의 동전',    d: '골드 획득 +50%', m: { gold: 0.5 } },
+  { id: 'sage',    slot: 'acc', tier: 1, price: 80,  n: '현자의 반지',    d: '경험치 +40%, 아이템 자석 +80%', m: { xpm: 0.4, mag: 0.8 } },
+  { id: 'hunter',  slot: 'acc', tier: 1, price: 120, n: '사냥꾼의 목걸이', d: '치명타 확률 +20%', m: { crit: 0.2 } },
+  { id: 'frostrg', slot: 'acc', tier: 2, price: 150, n: '서리 반지',      d: '❄빙결 확률 +12%, 빙결 시간 +1초', m: { frz: 0.12, frzT: 1 } },
+  { id: 'hourear', slot: 'acc', tier: 2, price: 170, n: '시간의 귀걸이',  d: '마법·소환 쿨타임 -30%', m: { cdr: 0.3, scd: 0.3 } },
+  { id: 'soul',    slot: 'acc', tier: 2, price: 170, n: '영혼의 부적',    d: '소환수 강화 +60%, 소환수 +1', m: { sm: 0.6, sn: 1 } },
+  { id: 'storm',   slot: 'acc', tier: 2, price: 190, n: '폭풍의 인장',    d: '공격 속도 +30%, 폭발 범위 +35%', m: { as: 0.3, area: 0.35 } },
+  { id: 'corpse',  slot: 'acc', tier: 2, price: 200, n: '시체 폭발 부적', d: '적 처치 시 💥폭발 (공격력 250% 범위 피해)', m: { kboom: 2.5 } },
+  { id: 'pact',    slot: 'acc', tier: 3, price: 320, n: '피의 계약',      d: '공격력 +40%, 치명타 +20%, 치명타 피해 3배', m: { atk: 0.4, crit: 0.2, critx: 1 } },
+  { id: 'chaos',   slot: 'acc', tier: 3, price: 340, n: '혼돈의 눈',      d: '❄빙결 +15%, 🔥화상, ☠독, ⚡연쇄 번개 2명 — 모든 원소를 부여', m: { frz: 0.15, burn: 0.5, psn: 0.25, chain: 2 } },
 ];
 
 // 보스를 쓰러뜨리면 3개 중 1개 선택. 장착 없이 영구 적용.
 const RELICS = [
-  { id: 'grail',  n: '피의 성배',       d: '최대 HP +30, 처치 시 HP +2', m: { maxhp: 30, ls: 2 } },
-  { id: 'horn',   n: '마왕의 뿔',       d: '공격력 +30%', m: { atk: 0.3 } },
-  { id: 'glass',  n: '시간의 모래시계', d: '마법·소환 쿨타임 -25%', m: { cdr: 0.25, scd: 0.25 } },
-  { id: 'banner', n: '군주의 깃발',     d: '소환수 +2, 소환수 강화 +40%', m: { sn: 2, sm: 0.4 } },
+  { id: 'grail',  n: '피의 성배',       d: '최대 HP +50, 처치 시 HP +3', m: { maxhp: 50, ls: 3 } },
+  { id: 'horn',   n: '마왕의 뿔',       d: '공격력 +40%', m: { atk: 0.4 } },
+  { id: 'glass',  n: '시간의 모래시계', d: '마법·소환 쿨타임 -30%', m: { cdr: 0.3, scd: 0.3 } },
+  { id: 'banner', n: '군주의 깃발',     d: '소환수 +2, 소환수 강화 +50%', m: { sn: 2, sm: 0.5 } },
   { id: 'prism',  n: '분열의 수정',     d: '마법구체 +2', m: { multi: 2 } },
   { id: 'heart',  n: '불사의 심장',     d: '스테이지마다 1번, 쓰러지면 HP 50%로 부활', m: { revive: 1 } },
-  { id: 'crown',  n: '탐욕의 왕관',     d: '골드 +60%, 경험치 +20%', m: { gold: 0.6, xpm: 0.2 } },
-  { id: 'wing',   n: '폭풍의 날개',     d: '이동 속도 +20%, 점프 +1단', m: { spd: 0.2, mj: 1 } },
-  { id: 'eye',    n: '저주받은 눈',     d: '치명타 확률 +20%', m: { crit: 0.2 } },
-  { id: 'fang',   n: '흡혈귀의 송곳니', d: '검 피해의 10% 흡혈', m: { vamp: 0.1 } },
-  { id: 'aegis',  n: '어둠의 방패',     d: '받는 피해 -20%', m: { dr: 0.2 } },
+  { id: 'crown',  n: '탐욕의 왕관',     d: '골드 +70%, 경험치 +25%', m: { gold: 0.7, xpm: 0.25 } },
+  { id: 'wing',   n: '폭풍의 날개',     d: '이동 속도 +25%, 점프 +1단', m: { spd: 0.25, mj: 1 } },
+  { id: 'eye',    n: '저주받은 눈',     d: '치명타 확률 +25%', m: { crit: 0.25 } },
+  { id: 'fang',   n: '흡혈귀의 송곳니', d: '검 피해의 12% 흡혈', m: { vamp: 0.12 } },
+  { id: 'aegis',  n: '어둠의 방패',     d: '받는 피해 -25%', m: { dr: 0.25 } },
+  { id: 'iceq',   n: '얼음 여왕의 심장', d: '❄빙결 확률 +20%, 맞으면 주변 적 빙결', m: { frz: 0.2, frzA: 1 } },
+  { id: 'hellf',  n: '지옥불 인장',     d: '마법 폭발 🔥화상 (초당 공격력 120%)', m: { burn: 1.2 } },
+  { id: 'stormc', n: '폭풍의 핵',       d: '마법 폭발 시 ⚡연쇄 번개 3명', m: { chain: 3 } },
 ];
 
 const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));

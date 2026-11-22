@@ -50,6 +50,7 @@ function drawE(e) {
   const P = (c) => (g.fillStyle = f ? '#fff' : c), S2 = (c) => (g.strokeStyle = f ? '#fff' : c);
   // 버프 / 시전 이펙트 (뒤쪽)
   g.save(); g.globalCompositeOperation = 'lighter';
+  if (e.elite) glow(sx, e.y - h * 0.5, h * 0.9, '255,200,60', 0.3 + 0.1 * Math.sin(time * 5));
   if (e.bf > 0) glow(sx, e.y - h * 0.4, h * 0.8, '255,150,60', 0.35 + 0.15 * Math.sin(time * 12));
   if (e.cast > 0 && e.D.role) glow(sx, e.y - h * 0.6, 60, hexRgb(e.D.role[1]), e.cast);
   g.restore();
@@ -110,6 +111,25 @@ function drawE(e) {
 // 보호막 · 역할 아이콘 · 체력바 (좌우 반전 없이)
 function drawStatus(e) {
   const sx = e.x - cam, cy = e.y - e.h / 2;
+  g.save(); g.globalCompositeOperation = 'lighter';
+  if (e.burnT > 0) glow(sx, cy + e.h * 0.2, e.w * 1.3, '255,110,30', 0.35 + 0.2 * Math.sin(time * 20 + e.ph));
+  if (e.psnT > 0) glow(sx, cy, e.w * 1.1, '120,255,60', 0.12 * e.psnS);
+  g.restore();
+  if (e.frz > 0) {
+    // 얼음 덩어리
+    g.fillStyle = 'rgba(150,215,255,.45)'; g.fillRect(sx - e.w * 0.6, e.y - e.h - 4, e.w * 1.2, e.h + 4);
+    g.strokeStyle = '#e0f6ff'; g.lineWidth = 2; g.strokeRect(sx - e.w * 0.6, e.y - e.h - 4, e.w * 1.2, e.h + 4);
+    g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(sx - e.w * 0.45, e.y - e.h + 2, 4, e.h * 0.5);
+  }
+  if (e.psnT > 0 && e.psnS > 1) {
+    g.font = '13px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#9aff5a';
+    g.fillText('☠' + e.psnS, sx + e.w * 0.6 + 6, e.y - e.h + 4); g.textAlign = 'left';
+  }
+  if (e.elite) {
+    g.font = '13px "Do Hyeon",sans-serif'; g.textAlign = 'center';
+    g.fillStyle = '#000'; g.fillText('정예', sx + 1, e.y - e.h - 27); g.fillStyle = '#ffd24a'; g.fillText('정예', sx, e.y - e.h - 28);
+    g.textAlign = 'left';
+  }
   if (e.shd > 0) {
     g.save(); g.globalCompositeOperation = 'lighter';
     g.strokeStyle = `rgba(120,190,255,${0.5 + 0.2 * Math.sin(time * 6)})`; g.lineWidth = 3;
@@ -142,7 +162,7 @@ function drawWisp(e) {
   g.fillStyle = e.fl > 0 ? '#fff' : '#fff6d0';
   g.beginPath(); g.arc(sx, y, 6 + Math.sin(e.ph * 4), 0, 7); g.fill();
   g.restore();
-  if (e.shd > 0) drawStatus(e);
+  drawStatus(e);
 }
 
 function drawCrystal(e) {
@@ -210,7 +230,8 @@ function drawBoss(e) {
     P('#ffe680'); g.beginPath(); g.arc(44, -180, e.tel ? 14 + Math.sin(time * 30) * 3 : 11, 0, 7); g.fill();
   }
   g.restore();
-  if (e.shd > 0) drawStatus(e);
+  if (e.shd > 0 || e.slow > 0 || e.burnT > 0 || e.psnT > 0) drawStatus(e);
+  if (e.slow > 0) { g.save(); g.globalCompositeOperation = 'lighter'; glow(sx, e.y - 80, 120, '120,200,255', 0.3); g.restore(); }
 }
 
 // ----- 바닥 위험지대 (빛기둥) -----
@@ -329,6 +350,15 @@ function draw() {
   for (const a of al) drawA(a);
   drawP();
   for (const o of pr) {
+    if (o.sw) {
+      // 검기: 초승달
+      g.save(); g.globalCompositeOperation = 'lighter'; g.translate(o.x - cam, o.y); g.scale(o.f, 1);
+      g.globalAlpha = Math.min(1, o.life * 4);
+      g.strokeStyle = '#bfe6ff'; g.lineWidth = 7; g.beginPath(); g.arc(-20, 0, 46, -1.1, 1.1); g.stroke();
+      g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(-20, 0, 46, -0.9, 0.9); g.stroke();
+      g.restore();
+      continue;
+    }
     const f = FR.orb[((o.a / 0.08) | 0) % 3], w = 56, h = (w * f.h) / f.w;
     g.save(); g.globalCompositeOperation = 'lighter'; g.drawImage(f.i, o.x - cam - w / 2, o.y - h / 2, w, h); g.restore();
   }
@@ -346,6 +376,14 @@ function draw() {
     g.fillStyle = o.c || (o.ar ? '#ffe9b0' : '#ffd84a'); g.beginPath(); g.arc(x, o.y, r, 0, 7); g.fill();
     g.fillStyle = '#fff'; g.beginPath(); g.arc(x, o.y, r * 0.4, 0, 7); g.fill();
   }
+  // 연쇄 번개
+  for (const z of zp) {
+    g.strokeStyle = '#cfe8ff'; g.globalAlpha = 1 - z.t / 0.25; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(z.x1 - cam, z.y1);
+    for (let i = 1; i < 6; i++) { const k = i / 6; g.lineTo(z.x1 + (z.x2 - z.x1) * k - cam + rr(-10, 10), z.y1 + (z.y2 - z.y1) * k + rr(-10, 10)); }
+    g.lineTo(z.x2 - cam, z.y2); g.stroke();
+  }
+  g.globalAlpha = 1;
   // 퍼지는 원 (힐/버프/보호막 시전)
   for (const w of wv) {
     const k = w.t / 0.6;

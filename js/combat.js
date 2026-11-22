@@ -11,14 +11,18 @@ function wave(x, y, c, r) { wv.push({ x, y, c, r: r || 120, t: 0 }); }
 
 // ----- 적 생성 -----
 function spawn(type, x, opt) {
-  const D = ENEMY[type], L = depth(), m = 1 + L * 0.35 + lvl * 0.06;
+  const D = ENEMY[type], L = depth(), m = 1 + L * 0.23 + lvl * 0.05;
   const e = {
     t: type, D, x: x ?? cl(p.x + (R() < 0.5 ? -1 : 1) * (W / 2 + 60), 30, WW - 30), y: GY,
     kx: 0, fl: 0, ph: R() * 6, dir: 1, w: D.w, h: D.h, sp: D.sp * rr(0.85, 1.15),
-    dmg: (8 + L * 2.5) * D.dm, hp: D.hp * m, sh: rr(1, 2), ac: 0, cd: rr(1.5, D.cd || 2),
-    shd: 0, shdT: 0, bf: 0, cast: 0,
+    dmg: (8 + L * 1.6) * D.dm, hp: D.hp * m, sh: rr(1, 2), ac: 0, cd: rr(1.5, D.cd || 2),
+    shd: 0, shdT: 0, bf: 0, cast: 0, frz: 0, burnT: 0, psnT: 0, psnS: 0,
   };
   if (D.fly) e.y = GY - rr(90, 170);
+  // 정예: 각 월드 3번째 스테이지부터 가끔 등장. 체력 3배, 크고 강하고 보상이 큼
+  if (!opt && !D.minion && D.ai !== 'crystal' && !isBossStage() && cur.s >= 2 && R() < ELITE_CHANCE) {
+    e.elite = 1; e.hp *= 3; e.dmg *= 1.4; e.w *= 1.25; e.h *= 1.25; e.sp *= 1.1;
+  }
   Object.assign(e, opt);
   e.mh = e.hp;
   en.push(e);
@@ -31,8 +35,10 @@ function melee() {
   fx.push({ a: FR.slash, x: p.x + p.face * 55, y: p.y - 58, d: 0.06, sz: 150, hh: 120, f: -p.face, t: 0 });
   let dealt = 0;
   for (const e of en)
-    if (!e.dead && Math.abs(e.x - x) < 75 + e.w / 2 && e.y > p.y - 130 && e.y - e.h < p.y) dealt += hit(e, dm(), p.face * 260, rollCrit());
+    if (!e.dead && Math.abs(e.x - x) < 75 + e.w / 2 && e.y > p.y - 130 && e.y - e.h < p.y) dealt += hit(e, dm(), p.face * 260, rollCrit(), 'sw');
   if (T.vamp && dealt > 0) heal(dealt * T.vamp);
+  // 검기: 적을 관통하며 날아감
+  if (T.swave) pr.push({ sw: 1, x: p.x + p.face * 40, y: p.y - 60, vx: p.face * 760, vy: 0, life: 0.5, a: 0, f: p.face, dmg: dm() * T.swave, crit: rollCrit(), hs: new Set() });
 }
 
 function shoot() {
@@ -50,23 +56,63 @@ function boom(x, y, d, crit) {
   const r = 90 * T.area;
   fx.push({ a: FR.exp, x, y, d: 0.07, sz: r * 2, f: 1, t: 0 });
   shake = Math.max(shake, 0.12);
-  for (const e of en) if (Math.hypot(e.x - x, e.y - e.h / 2 - y) < r + e.w / 2) hit(e, d, (e.x > x ? 1 : -1) * 200, crit);
+  for (const e of en) if (Math.hypot(e.x - x, e.y - e.h / 2 - y) < r + e.w / 2) hit(e, d, (e.x > x ? 1 : -1) * 200, crit, 'mg');
+  if (T.chain) chainBolt(x, y, d * 0.6, T.chain);
+}
+
+// 연쇄 번개: 폭발 지점에서 가까운 적으로 차례로 튐
+function chainBolt(x, y, d, n) {
+  const done = new Set();
+  for (let i = 0; i < n; i++) {
+    let best = null, bd = 300;
+    for (const e of en) {
+      if (e.dead || done.has(e)) continue;
+      const ds = Math.hypot(e.x - x, e.y - e.h / 2 - y);
+      if (ds < bd) { bd = ds; best = e; }
+    }
+    if (!best) break;
+    done.add(best);
+    const nx = best.x, ny = best.y - best.h / 2;
+    zp.push({ x1: x, y1: y, x2: nx, y2: ny, t: 0 });
+    hit(best, d, 0, false, 'ch');
+    x = nx; y = ny;
+  }
+}
+
+// 빙결: 일반 적은 정지, 보스는 둔화
+function freeze(e, t) {
+  if (e.D.ai === 'crystal') return;
+  if (e.t === 'boss') { if (!(e.slow > 0)) txt(e.x, e.y - e.h - 24, '❄ 둔화', '#9ad8ff'); e.slow = Math.max(e.slow || 0, t); return; }
+  if (!(e.frz > 0)) txt(e.x, e.y - e.h - 24, '❄ 빙결', '#9ad8ff');
+  e.frz = Math.max(e.frz, t); e.kx = 0;
 }
 
 // ----- 적에게 피해 (실제로 깎인 HP 반환) -----
-function hit(e, d, k, crit) {
+// src: sw 검 / mg 마법 / sm 소환수 / ch 번개 / kb 처치폭발 / th 반격 / burn 화상 / psn 독
+const DMG_COL = { burn: '#ff9a40', psn: '#9aff5a', ch: '#bfe0ff', kb: '#ffb070' };
+function hit(e, d, k, crit, src) {
   if (e.dead) return 0;
   if (e.inv > 0) { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
-  if (crit) d *= 2;
+  if (crit) d *= 2 + T.critx;
+  if (e.frz > 0 && T.frzB) d *= 1 + T.frzB;
   if (e.shd > 0) {
     const a = Math.min(e.shd, d);
     e.shd -= a; d -= a; e.fl = 0.08;
     if (R() < 0.3) txt(e.x, e.y - e.h - 22, '보호막', '#8ac8ff');
     if (d <= 0) return 0;
   }
-  e.hp -= d; e.fl = 0.12;
-  if (e.t !== 'boss' && e.D.ai !== 'crystal') e.kx += k;
-  txt(e.x, e.y - e.h - 6, Math.round(d) + (crit ? '!' : ''), crit ? '#ffd84a' : '#fff');
+  e.hp -= d;
+  if (src !== 'burn' && src !== 'psn') e.fl = 0.12;
+  if (e.t !== 'boss' && e.D.ai !== 'crystal' && !(e.frz > 0)) e.kx += k;
+  txt(e.x, e.y - e.h - 6, Math.round(d) + (crit ? '!' : ''), crit ? '#ffd84a' : DMG_COL[src] || '#fff');
+  // 적중 효과 (검/마법/소환수)
+  if (src === 'sw' || src === 'mg' || src === 'sm') {
+    const fc = src === 'sm' ? T.sfrz : T.frz;
+    if (fc && R() < fc) freeze(e, 1.5 + T.frzT);
+    if (src === 'mg' && T.burn) { e.burnT = 3; e.burnD = dm() * T.burn; }
+    if (src === 'sw' && T.psn) { e.psnS = Math.min(5, (e.psnT > 0 ? e.psnS : 0) + 1); e.psnT = 4; e.psnD = dm() * T.psn; }
+    if (T.exe && e.t !== 'boss' && e.D.ai !== 'crystal' && e.hp > 0 && e.hp < e.mh * T.exe) { e.hp = 0; txt(e.x, e.y - e.h - 24, '처형!', '#ff4a6a'); }
+  }
   if (e.hp <= 0) { e.dead = 1; kill(e); }
   return d;
 }
@@ -76,9 +122,11 @@ function kill(e) {
   if (e.t === 'boss') return bossDown(e);
   if (T.ls) heal(T.ls);
   if (!e.D.minion && e.D.ai !== 'crystal') kills++;
-  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp, x: e.x, y: e.y - e.h / 2, vy: -200, life: 1e9 });
-  if (e.D.gold) dropGold(e.x, e.y - e.h / 2, e.D.gold);
-  if (!e.D.minion && R() < 0.15) dr.push({ k: 'b', b: pickR(Object.keys(BF)), x: e.x, y: e.y - e.h / 2, vy: -300, life: 12 });
+  const el = e.elite ? 4 : 1;
+  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp * el, x: e.x, y: e.y - e.h / 2, vy: -200, life: 1e9 });
+  if (e.D.gold) dropGold(e.x, e.y - e.h / 2, e.D.gold * (e.elite ? 5 : 1), e.elite);
+  if (T.kboom) kq.push({ x: e.x, y: e.y - e.h / 2 });
+  if (!e.D.minion && (e.elite || R() < 0.15)) dr.push({ k: 'b', b: pickR(Object.keys(BF)), x: e.x, y: e.y - e.h / 2, vy: -300, life: 12 });
 }
 
 function dropGold(x, y, v, spread) {
@@ -97,9 +145,15 @@ function hurtP(d) {
   p.hp -= d; p.inv = 1;
   txt(p.x, p.y - 100, Math.round(d), '#ff4a6a');
   shake = 0.25;
+  if (T.frzA && p.frzCd <= 0) {
+    // 서리 갑주: 주변 적 빙결
+    p.frzCd = 4;
+    wave(p.x, p.y - 50, '#9ad8ff', 200);
+    for (const e of en) if (Math.abs(e.x - p.x) < 200 && Math.abs(e.y - e.h / 2 - (p.y - 50)) < 160) freeze(e, 2 + T.frzT);
+  }
   if (p.hp <= 0) {
-    if (T.revive > 0 && !p.revUsed) {
-      p.revUsed = 1; p.hp = T.maxhp * 0.5; p.inv = 2.5; shake = 0.6;
+    if (p.revUsed < T.revive) {
+      p.revUsed++; p.hp = T.maxhp * 0.5; p.inv = 2.5; shake = 0.6;
       txt(p.x, p.y - 125, '불사의 심장 — 부활!', '#ff8aa8');
       wave(p.x, p.y - 50, '#ff4a6a', 320);
       return;
@@ -133,7 +187,7 @@ function summon() {
   const b0 = al.length;
   for (let i = 0; i < nw; i++) {
     const bat = (b0 + i) % 2, o = (i - (nw - 1) / 2) * 40, x = p.x + o * 1.2, y = bat ? p.y - 80 : GY;
-    const mh = (bat ? 30 : 55) * T.sm * (1 + depth() * 0.2);
+    const mh = (bat ? 30 : 55) * T.sm * (1 + depth() * 0.13);
     al.push({ t: bat ? 'bat' : 'slime', x, y, w: bat ? 36 : 40, h: bat ? 26 : 32, sp: bat ? 150 : 120, life: 1, ph: R() * 6,
               dir: p.face, cd: 0, o, hp: mh, mh, iv: 0, fl: 0 });
     fx.push({ a: [FR.exp[1], FR.exp[2]], x, y: y - 16, d: 0.08, sz: 80, f: 1, t: 0 });

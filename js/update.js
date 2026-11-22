@@ -21,7 +21,7 @@ function updPlayer(dt) {
   } else {
     const d = (keys[KB.R] ? 1 : 0) - (keys[KB.L] ? 1 : 0);
     const sp = T.spd * (p.b.spd ? 1.4 : 1) * (p.st === 'atk' || p.st === 'cast' ? 0.45 : 1);
-    p.cd -= dt; p.sc -= dt; p.inv -= dt; p.dn -= dt;
+    p.cd -= dt; p.sc -= dt; p.inv -= dt; p.dn -= dt; p.frzCd -= dt;
     if (p.st === 'hurt') { p.t += dt; p.vx *= 0.92; if (p.t > 0.25) p.st = 'n'; }
     else { p.vx = d * sp; if (d && p.st === 'n') p.face = d; }
     // 꾹 누르고 있으면 연속 공격
@@ -72,11 +72,24 @@ function updProjectiles(dt) {
   // 플레이어 마법구체
   for (const o of pr) {
     o.x += o.vx * dt; o.y += o.vy * dt; o.life -= dt; o.a += dt;
+    if (o.sw) {
+      // 검기: 관통, 적마다 한 번씩
+      for (const e of en)
+        if (!e.dead && !o.hs.has(e) && Math.abs(o.x - e.x) < e.w / 2 + 30 && o.y > e.y - e.h - 30 && o.y < e.y + 10) { o.hs.add(e); hit(e, o.dmg, o.f * 160, o.crit, 'sw'); }
+      if (o.life <= 0) o.dead = 1;
+      continue;
+    }
     for (const e of en)
       if (!o.dead && !e.dead && Math.abs(o.x - e.x) < e.w / 2 + 14 && o.y > e.y - e.h - 14 && o.y < e.y + 10) { o.dead = 1; boom(o.x, o.y, o.dmg, o.crit); }
     if ((o.life <= 0 || o.y >= GY - 4) && !o.dead) { o.dead = 1; boom(o.x, Math.min(o.y, GY - 4), o.dmg, o.crit); }
   }
   pr = pr.filter((o) => !o.dead);
+  // 시체 폭발 (처치 다음 프레임에 터짐)
+  const q = kq; kq = [];
+  for (const b of q) {
+    fx.push({ a: FR.exp, x: b.x, y: b.y, d: 0.06, sz: 170, f: 1, t: 0 });
+    for (const e of en) if (!e.dead && Math.hypot(e.x - b.x, e.y - e.h / 2 - b.y) < 85 + e.w / 2) hit(e, dm() * T.kboom, (e.x > b.x ? 1 : -1) * 150, false, 'kb');
+  }
   en = en.filter((e) => !e.dead);
 
   // 적 탄환 (gw: 땅 충격파, hm: 유도탄, ar: 화살)
@@ -88,7 +101,7 @@ function updProjectiles(dt) {
       o.vx = Math.cos(na) * s; o.vy = Math.sin(na) * s;
     }
     o.x += o.vx * dt; o.y += o.vy * dt; o.life -= dt;
-    const od = o.d || 14 + depth() * 2, orr = o.r || (o.ar ? 5 : 8);
+    const od = o.d || 14 + depth() * 1.3, orr = o.r || (o.ar ? 5 : 8);
     if (p.inv <= 0 && p.st !== 'dead' && (o.gw ? Math.abs(o.x - p.x) < 28 && p.y > GY - 46 : Math.hypot(o.x - p.x, o.y - p.y + 45) < orr + 18)) {
       if (!o.gw) o.life = 0;
       hurtP(od);
@@ -139,6 +152,8 @@ function vfx(dt) {
   pt = pt.filter((q) => q.t > 0);
   for (const r of rg) r.t += dt;
   rg = rg.filter((r) => r.t < 0.9);
+  for (const z of zp) z.t += dt;
+  zp = zp.filter((z) => z.t < 0.25);
   for (const w of wv) w.t += dt;
   wv = wv.filter((w) => w.t < 0.6);
   lf = Math.max(0, lf - dt * 1.2);

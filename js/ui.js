@@ -75,14 +75,20 @@ function pickRelic(i) {
 }
 
 // ----- 정비 화면 (스테이지 사이) -----
+// 상점 상품은 맵이 바뀔 때마다 새로 바뀜. 🔒 잠근 상품은 사거나 잠금을 풀 때까지 계속 남아 있음.
+const lockCost = (it) => Math.max(10, Math.round(it.price * 0.1));
+const rerollCost = () => REROLL_PRICE + rerollN * 10;
+
 function rollStock() {
-  const tier = WORLDS[nextCur().w].tier;
-  stock = shuffle(ITEMS.filter((i) => i.tier <= tier && !inv.includes(i.id))).slice(0, 4).map((i) => i.id);
+  lockd = lockd.filter((id) => !inv.includes(id));
+  const cap = tierCap(nextCur());
+  const pool = shuffle(ITEMS.filter((i) => i.tier <= cap && !inv.includes(i.id) && !lockd.includes(i.id)));
+  stock = [...lockd, ...pool.slice(0, Math.max(0, SHOP_SIZE - lockd.length)).map((i) => i.id)];
 }
 
 function shopMenu(tab, fresh) {
   state = 'shop'; mb = {}; ban = null;
-  if (fresh) rollStock();
+  if (fresh) { rollStock(); rerollN = 0; }
   if (tab) shopTab = tab;
   const nc = nextCur(), nd = stageDef(nc);
   const tabs = [['shop', '상점'], ['equip', '장비'], ['relic', '유물']]
@@ -96,30 +102,43 @@ function shopMenu(tab, fresh) {
 }
 
 const card = (it, btn, cls = '') =>
-  `<div class="card t${it.tier} ${cls}"><small>${SLOT[it.slot]} · ${'★'.repeat(it.tier)}</small><b>${it.n}</b><div class=d>${it.d}</div>${btn}</div>`;
+  `<div class="card t${it.tier} ${cls}"><small>${SLOT[it.slot]} · <span class=tier>${'★'.repeat(it.tier)} ${TIER_NAME[it.tier]}</span></small><b>${it.n}</b><div class=d>${it.d}</div>${btn}</div>`;
 
 function shopHTML() {
   const items = stock.map((id) => {
     const it = ITEM[id];
     if (inv.includes(id)) return card(it, '<button disabled>구매 완료</button>', 'sold');
-    return card(it, `<button ${gold < it.price ? 'disabled' : ''} onclick="buy('${id}')">${it.price} G 구매</button>`);
+    const locked = lockd.includes(id);
+    const lockBtn = locked
+      ? `<button class=lock onclick="toggleLock('${id}')" title="잠금 해제 (무료)">🔒 잠김</button>`
+      : `<button class=lock ${gold < lockCost(it) ? 'disabled' : ''} onclick="toggleLock('${id}')" title="다음 맵에서도 이 상품 유지">🔓 ${lockCost(it)}G</button>`;
+    return card(it, `<div class=btns><button ${gold < it.price ? 'disabled' : ''} onclick="buy('${id}')">${it.price} G 구매</button>${lockBtn}</div>`, locked ? 'locked' : '');
   }).join('');
   const full = p.hp >= T.maxhp;
   const potion = `<div class="card t0"><small>소모품</small><b>회복 물약</b><div class=d>HP를 전부 회복합니다.</div>
     <button ${gold < POTION_PRICE || full ? 'disabled' : ''} onclick="buyPotion()">${full ? 'HP 가득' : POTION_PRICE + ' G 구매'}</button></div>`;
   return `<div class=grid>${items || '<p>더 살 수 있는 장비가 없어요.</p>'}${potion}</div>
-  <div class=row><button ${gold < REROLL_PRICE ? 'disabled' : ''} onclick="reroll()">상품 새로고침 (${REROLL_PRICE} G)</button></div>
-  <p><small>산 장비는 빈 칸이면 바로 장착되고, 아니면 가방에 들어갑니다. [장비] 탭에서 바꿔 끼세요.</small></p>`;
+  <div class=row><button ${gold < rerollCost() ? 'disabled' : ''} onclick="reroll()">상품 새로고침 (${rerollCost()} G) — 잠근 상품은 유지</button></div>
+  <p><small>상품은 맵마다 바뀝니다. 마음에 드는 상품은 🔓 잠금(가격의 10%)하면 다음 맵에서도 남아 있어요.<br>
+  ${tierCap(nextCur()) < 3 ? `★★${tierCap(nextCur()) < 2 ? ' 희귀 장비는 1-3부터,' : ''} ★★★ 전설 장비는 2월드부터 등장해요.` : ''}</small></p>`;
 }
+
+const slotsFor = (it) => (it.slot === 'acc' ? ['acc1', 'acc2'] : [it.slot]);
 
 function equipHTML() {
   const worn = Object.values(eq);
-  const slots = Object.keys(SLOT).map((s) => {
+  const slots = Object.keys(EQ_SLOTS).map((s) => {
     const it = eq[s] && ITEM[eq[s]];
-    if (!it) return `<div class="card empty"><small>${SLOT[s]}</small><b>— 비어 있음 —</b><div class=d></div></div>`;
+    if (!it) return `<div class="card empty"><small>${EQ_SLOTS[s]}</small><b>— 비어 있음 —</b><div class=d></div></div>`;
     return card(it, `<button onclick="unequip('${s}')">해제</button>`, 'eq');
   }).join('');
-  const bag = inv.filter((id) => !worn.includes(id)).map((id) => card(ITEM[id], `<button onclick="equip('${id}')">장착</button>`)).join('');
+  const bag = inv.filter((id) => !worn.includes(id)).map((id) => {
+    const it = ITEM[id], sl = slotsFor(it);
+    const btn = sl.length > 1 && sl.every((s) => eq[s])
+      ? `<div class=btns>${sl.map((s, i) => `<button onclick="equip('${id}','${s}')">${i + 1}번과 교체</button>`).join('')}</div>`
+      : `<button onclick="equip('${id}')">장착</button>`;
+    return card(it, btn);
+  }).join('');
   return `<h3>장착 중</h3><div class=grid>${slots}</div>
   <h3>가방</h3><div class=grid>${bag || '<p>가방이 비어 있어요. 상점에서 장비를 사세요.</p>'}</div>${statsHTML()}`;
 }
@@ -135,10 +154,18 @@ function statsHTML() {
     ['공격력', T.atk.toFixed(1)], ['최대 HP', Math.round(T.maxhp)], ['공격 속도', pc(T.as)], ['이동 속도', Math.round(T.spd)],
     ['마법 위력', pc(T.mp)], ['마법구체', 1 + T.multi + '발'], ['마법 쿨타임', (MAG_CD * T.cdr).toFixed(2) + '초'],
     ['소환수', Math.round(T.sn) + '마리'], ['소환수 강화', pc(T.sm)], ['소환 쿨타임', (SCD * T.scd).toFixed(1) + '초'],
-    ['받는 피해', (T.dr >= 0 ? '-' : '+') + pc(Math.abs(T.dr))], ['치명타', pc(T.crit)], ['검 흡혈', pc(T.vamp)],
+    ['받는 피해', (T.dr >= 0 ? '-' : '+') + pc(Math.abs(T.dr))], ['치명타', `${pc(T.crit)} (×${2 + T.critx})`], ['검 흡혈', pc(T.vamp)],
     ['처치 시 회복', T.ls], ['골드 획득', pc(T.gold)], ['최대 점프', T.mj + '단'],
   ];
-  return `<h3>현재 능력치</h3><div class=stats>${rows.map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>`;
+  // 특수 효과는 있을 때만 표시
+  const fx2 = [
+    [T.frz, '❄ 빙결', pc(T.frz) + (T.frzT ? ` · ${1.5 + T.frzT}초` : '')], [T.frzB, '빙결 적 추가 피해', '+' + pc(T.frzB)],
+    [T.sfrz, '소환수 빙결', pc(T.sfrz)], [T.frzA, '피격 시 빙결', '켜짐'], [T.burn, '🔥 화상', `초당 ${pc(T.burn)}`],
+    [T.psn, '☠ 독', `중첩당 초당 ${pc(T.psn)}`], [T.chain, '⚡ 연쇄 번개', T.chain + '명'], [T.swave, '검기', pc(T.swave)],
+    [T.exe, '처형', pc(T.exe) + ' 이하'], [T.kboom, '💥 시체 폭발', pc(T.kboom)], [T.thorns, '반격', pc(T.thorns)],
+    [T.revive, '부활', T.revive + '회'],
+  ].filter((r) => r[0]).map((r) => [r[1], r[2]]);
+  return `<h3>현재 능력치</h3><div class=stats>${[...rows, ...fx2].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>`;
 }
 
 function refreshMenu() { state === 'shop' ? shopMenu() : equipPause(); }
@@ -148,8 +175,20 @@ function buy(id) {
   if (gold < it.price || inv.includes(id)) return;
   gold -= it.price;
   inv.push(id);
-  if (!eq[it.slot]) eq[it.slot] = id;
+  lockd = lockd.filter((x) => x !== id);
+  const empty = slotsFor(it).find((s) => !eq[s]);
+  if (empty) eq[empty] = id;
   recalc();
+  shopMenu();
+}
+function toggleLock(id) {
+  if (lockd.includes(id)) lockd = lockd.filter((x) => x !== id);
+  else {
+    const c = lockCost(ITEM[id]);
+    if (gold < c) return;
+    gold -= c;
+    lockd.push(id);
+  }
   shopMenu();
 }
 function buyPotion() {
@@ -159,12 +198,19 @@ function buyPotion() {
   shopMenu();
 }
 function reroll() {
-  if (gold < REROLL_PRICE) return;
-  gold -= REROLL_PRICE;
+  if (gold < rerollCost()) return;
+  gold -= rerollCost();
+  rerollN++;
   rollStock();
   shopMenu();
 }
-function equip(id) { eq[ITEM[id].slot] = id; recalc(); refreshMenu(); }
+function equip(id, slot) {
+  const sl = slotsFor(ITEM[id]);
+  slot = slot || sl.find((s) => !eq[s]) || sl[0];
+  eq[slot] = id;
+  recalc();
+  refreshMenu();
+}
 function unequip(s) { eq[s] = null; recalc(); refreshMenu(); }
 
 // ----- 결과 -----

@@ -17,10 +17,28 @@ function updEnemies(dt) {
   for (const e of en) {
     e.fl -= dt; e.ph += dt * 3; e.ac -= dt; e.bf -= dt; e.cast -= dt;
     if (e.shdT > 0 && (e.shdT -= dt) <= 0) e.shd = 0;
+    // 화상 / 독: 0.5초마다 피해
+    if (e.burnT > 0 || e.psnT > 0) {
+      e.burnT -= dt; e.psnT -= dt;
+      e.dotT = (e.dotT ?? 0.5) - dt;
+      if (e.dotT <= 0) {
+        e.dotT = 0.5;
+        if (e.burnT > 0) hit(e, e.burnD * 0.5, 0, false, 'burn');
+        if (e.psnT > 0 && !e.dead) hit(e, e.psnD * e.psnS * 0.5, 0, false, 'psn');
+      }
+      if (e.dead) continue;
+    }
+    // 빙결: 아무것도 못 함
+    if (e.frz > 0) {
+      e.frz -= dt;
+      e.x += e.kx * dt; e.kx *= Math.pow(0.02, dt);
+      continue;
+    }
+    if (e.slow > 0) e.slow -= dt;
     const dx = p.x - e.x, ai = e.D.ai;
     const spd = e.sp * (e.bf > 0 ? 1.5 : 1), dmg = e.dmg * (e.bf > 0 ? 1.4 : 1);
 
-    if (e.t === 'boss') bossAI(e, dt, dx);
+    if (e.t === 'boss') bossAI(e, e.slow > 0 ? dt * 0.5 : dt, dx);
     else if (ai === 'crystal') { /* 제자리 */ }
     else if (ai === 'wisp') {
       // 빛의 정령: 플레이어나 소환수에게 날아감
@@ -72,7 +90,7 @@ function updEnemies(dt) {
       // 플레이어 몸통 박치기
       if (p.inv <= 0 && p.st !== 'dead' && Math.abs(dx) < (e.w + 30) / 2 && p.y > e.y - e.h && p.y - 90 < e.y) {
         hurtP(dmg);
-        if (T.thorns && !e.dead) hit(e, dm() * T.thorns, -e.dir * 200);
+        if (T.thorns && !e.dead) hit(e, dm() * T.thorns, -e.dir * 200, false, 'th');
       }
     }
   }
@@ -137,7 +155,7 @@ function updSummons(dt) {
     if (a.t === 'bat') a.y += ((tg ? tg.y - tg.h / 2 : p.y - 90) + Math.sin(a.ph) * 12 - a.y) * dt * 3;
     if (tg && a.cd <= 0 && Math.abs(tg.x - a.x) < (tg.w + a.w) / 2 + 4 && Math.abs(tg.y - tg.h / 2 - (a.y - a.h / 2)) < (tg.h + a.h) / 2) {
       a.cd = 0.5;
-      hit(tg, dm() * T.sm * (a.t === 'bat' ? 0.7 : 1), a.dir * 120);
+      hit(tg, dm() * T.sm * (a.t === 'bat' ? 0.7 : 1), a.dir * 120, false, 'sm');
     }
   }
   al = al.filter((a) => a.life > 0);

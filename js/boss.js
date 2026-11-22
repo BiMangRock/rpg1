@@ -3,8 +3,8 @@
 //  체력 66% / 33% 에서 2·3페이즈로 넘어감
 // =====================================================================
 const BOSS = {
-  hero: { n: '각성한 용사', mk: () => ({ w: 120, h: 150, dmg: 30, hp: 2400 + lvl * 120 }), ai: heroAI },
-  pope: { n: '대주교 루미엘', mk: () => ({ w: 90, h: 170, dmg: 26, hp: 4200 + lvl * 160, y: GY - 40, alpha: 1 }), ai: popeAI },
+  hero: { n: '각성한 용사', mk: () => ({ w: 120, h: 150, dmg: 30, hp: 3000 + lvl * 130 }), ai: heroAI },
+  pope: { n: '대주교 루미엘', mk: () => ({ w: 90, h: 170, dmg: 26, hp: 5200 + lvl * 170, y: GY - 40, alpha: 1 }), ai: popeAI },
 };
 
 function mkBoss() {
@@ -53,7 +53,7 @@ function bossDown(e) {
   bdone = 1; boss = null; eb = []; hz = [];
   for (const o of en) if (o !== e) o.dead = 1;
   for (let i = 0; i < 12; i++) dr.push({ k: 'xp', v: 8 + cur.w * 6, x: e.x + rr(-60, 60), y: e.y - 80, vy: rr(-500, -200), life: 1e9 });
-  dropGold(e.x, e.y - 80, [150, 300][cur.w] || 300, true);
+  dropGold(e.x, e.y - 80, [200, 400][cur.w] || 400, true);
   shake = 0.8;
   if (cur.w === WORLDS.length - 1) { ban = { s: '최종 보스 격파!', t: 3 }; winT = 2.5; }
   else openPortal('보스 격파! 포털에 들어가 보상을 받으세요');

@@ -33,6 +33,10 @@ button:disabled:hover{background:#2a1633}
 .card.t1 b{color:#cfe6ff}
 .card.t2{border-color:#8a4ac0}.card.t2 b{color:#e0b0ff}
 .card.t0 b{color:#9aff9a}
+.card.t3{border-color:#ff9a30;background:#24140c}.card.t3 b{color:#ffc070}
+.card.locked{border-color:#ffd24a;box-shadow:0 0 0 2px #ffd24a55}
+.btns{display:flex;gap:4px}.btns button{flex:1;padding:5px 4px}
+button.lock{flex:0 0 auto;border-color:#8a6a2a}
 .card.eq{border-color:var(--gd)}
 .card.empty{opacity:.5}
 .card.sold{opacity:.5}
