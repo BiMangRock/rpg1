@@ -113,7 +113,7 @@ function newRun() {
 // ----- 스테이지 시작 -----
 function go() {
   kills = 0; portal = null; boss = null; bdone = 0; bossT = 2; spt = 0; winT = 0;
-  en = []; pr = []; eb = []; dr = []; fx = []; tx = []; pt = []; rg = []; hz = []; wv = []; kq = []; zp = [];
+  en = []; corpses = []; pr = []; eb = []; dr = []; fx = []; tx = []; pt = []; rg = []; hz = []; wv = []; kq = []; zp = [];
   p.x = 120; p.y = GY; p.vx = p.vy = 0; p.st = 'n'; p.revUsed = 0; p.inv = 1; cam = 0;
   p.slowT = p.burnT = p.psnT = 0;
   // 소환수는 다음 스테이지로 따라온다

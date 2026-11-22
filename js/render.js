@@ -89,6 +89,7 @@ function drawE(e) {
   if (e.cast > 0 && e.D.role) glow(sx, e.y - h * 0.6, 60, hexRgb(e.D.role[1]), e.cast);
   g.restore();
 
+  if (esHas(e.t) && esDrawEnemy(e, sx)) { drawStatus(e); return; }
   g.save(); g.translate(sx, e.y); g.scale(e.dir, 1);
   const bc = e.D.col, k = e.D.look, wk = Math.sin(e.ph * 2.5) * (e.kx > 20 ? 0 : 1);
   if (k >= 5) {
@@ -441,6 +442,8 @@ function drawP() {
   const t = time;
   if (p.st === 'dead') { a = FR.hurt; i = Math.min(5, (p.t / 0.22) | 0); }
   else if (p.st === 'hurt') { a = FR.hurt; i = 0; }
+  else if (p.dashT > 0 && FR.dash) { a = FR.dash; i = p.dashT > 0.15 ? 1 : 2; } // 돌진 베기
+  else if (p.st === 'atk' && p.dashCd > 0.72 && FR.dash) { a = FR.dash; i = 3; }
   else if (p.st === 'atk') { a = FR.atk; i = Math.min(4, (p.t / (0.055 / asm())) | 0); }
   else if (p.st === 'slam') { a = FR.atk; i = 2; }
   else if (p.st === 'cast') { a = FR.cast; i = Math.min(5, (p.t / (0.085 / asm())) | 0); }
@@ -547,6 +550,7 @@ function draw() {
       }
     }
   }
+  esDrawCorpses();
   for (const e of en) drawE(e);
   for (const a of al) drawA(a);
   drawP();

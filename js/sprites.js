@@ -56,5 +56,11 @@ const FR={
     {"s": "assets/sprites/flash_0.png", "w": 283, "h": 170, "ax": 141.5, "ay": 85.0},
     {"s": "assets/sprites/flash_1.png", "w": 337, "h": 239, "ax": 168.5, "ay": 119.5},
     {"s": "assets/sprites/flash_2.png", "w": 336, "h": 177, "ax": 168.0, "ay": 88.5}
+  ],
+  dash: [
+    {"s": "assets/sprites/dash_0.png", "w": 111.0, "h": 102.2, "ax": 60.0, "ay": 102.2},
+    {"s": "assets/sprites/dash_1.png", "w": 142.6, "h": 105.8, "ax": 75.6, "ay": 105.8},
+    {"s": "assets/sprites/dash_2.png", "w": 149.9, "h": 69.1, "ax": 72.0, "ay": 69.1},
+    {"s": "assets/sprites/dash_3.png", "w": 104.4, "h": 102.2, "ax": 58.1, "ay": 102.2}
   ]
 };

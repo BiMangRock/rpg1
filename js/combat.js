@@ -208,6 +208,7 @@ function hit(e, d, k = 0, crit, src) {
 }
 
 function kill(e, src) {
+  esDie(e);
   fx.push({ a: [FR.exp[1], FR.exp[2], FR.exp[3]], x: e.x, y: e.y - e.h / 2, d: 0.08, sz: e.w * 1.6, f: 1, t: 0 });
   if (e.t === 'boss') return bossDown(e);
   if (T.ls) heal(T.ls);
