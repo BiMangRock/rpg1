@@ -7,10 +7,17 @@ function nearestSummon(e, range) {
   let best = null, bd = range;
   for (const a of al) {
     if (a.life <= 0) continue;
-    const d = Math.abs(a.x - e.x);
+    const d = Math.abs(a.x - e.x) + Math.abs(a.y - e.y) * 1.5;
     if (d < bd) { bd = d; best = a; }
   }
   return best;
+}
+
+// 걷기. 점프 못 하는 적은 발판 끝에서 멈춤
+function stepX(e, dx) {
+  const nx = e.x + dx;
+  if (e.plat && !e.jumper && (nx < e.plat.x + 8 || nx > e.plat.x + e.plat.w - 8)) return;
+  e.x = nx;
 }
 
 function updEnemies(dt) {
@@ -28,6 +35,7 @@ function updEnemies(dt) {
       }
       if (e.dead) continue;
     }
+    if (e.t !== 'boss' && !e.D.fly && e.D.ai !== 'crystal') body(e, dt);
     // 빙결: 아무것도 못 함
     if (e.frz > 0) {
       e.frz -= dt;
@@ -52,17 +60,19 @@ function updEnemies(dt) {
       // 지원형: 플레이어와 거리를 두고 주기적으로 스킬 사용
       const ad = Math.abs(dx);
       e.dir = dx > 0 ? 1 : -1;
-      e.x += (ad < 260 ? -e.dir : ad > 380 ? e.dir : 0) * spd * dt;
+      stepX(e, (ad < 260 ? -e.dir : ad > 380 ? e.dir : 0) * spd * dt);
       e.cd -= dt;
       if (e.cd <= 0 && ad < 700) support(e);
     } else {
       // 근접형 / 궁수: 가까운 소환수가 있으면 그쪽을 노림
-      const a = nearestSummon(e, Math.min(320, Math.abs(dx)));
+      const a = nearestSummon(e, Math.min(320, Math.abs(dx) + Math.abs(p.y - e.y) * 1.5));
       const tdx = (a ? a.x : p.x) - e.x;
+      if (e.jumper) chaseJump(e, dt, a ? a.x : p.x, a ? a.y : p.y, 980);
+      else e.jx = null;
       if (ai === 'archer') {
         const ty = a ? a.y - a.h / 2 : p.y - 50, ad = Math.abs(tdx);
         e.dir = tdx > 0 ? 1 : -1;
-        e.x += (ad < 240 ? -e.dir : ad > 340 ? e.dir : 0) * spd * dt;
+        stepX(e, (ad < 240 ? -e.dir : ad > 340 ? e.dir : 0) * spd * dt);
         e.sh -= dt * (e.bf > 0 ? 1.5 : 1);
         if (e.sh <= 0 && ad < 520) {
           e.sh = 2.2;
@@ -70,8 +80,15 @@ function updEnemies(dt) {
           eb.push({ x: e.x, y: e.y - 45, vx: Math.cos(ang) * 280, vy: Math.sin(ang) * 280, life: 3, d: dmg, ar: 1 });
         }
       } else {
-        e.dir = tdx > 0 ? 1 : -1;
-        if (!a || Math.abs(tdx) > (e.w + a.w) / 2 - 8) e.x += e.dir * spd * dt;
+        if (e.jx != null) {
+          // 발판으로 올라가는 중
+          const mdx = e.jx - e.x;
+          e.dir = mdx > 0 ? 1 : -1;
+          if (Math.abs(mdx) > 4) stepX(e, e.dir * Math.min(spd * dt, Math.abs(mdx)));
+        } else {
+          e.dir = tdx > 0 ? 1 : -1;
+          if (!a || Math.abs(tdx) > (e.w + a.w) / 2 - 8) stepX(e, e.dir * spd * dt);
+        }
       }
     }
     if (e.t !== 'boss') e.x = cl(e.x, 20, WW - 20);
@@ -142,17 +159,27 @@ function support(e) {
 function updSummons(dt) {
   for (const a of al) {
     a.ph += dt * 3; a.cd -= dt; a.iv -= dt; a.fl -= dt;
+    // 너무 멀어지면 마왕 곁으로 순간이동
+    if (Math.hypot(a.x - p.x, a.y - p.y) > 750) {
+      a.x = cl(p.x + a.o, 20, WW - 20); a.y = a.t === 'bat' ? p.y - 80 : p.y; a.vy = 0;
+      fx.push({ a: [FR.exp[1], FR.exp[2]], x: a.x, y: a.y - 16, d: 0.06, sz: 60, f: 1, t: 0 });
+    }
+    // 목표: 가까운 적 (슬라임은 날아다니는 적과 너무 높은 곳의 적은 무시)
     let tg = null, bd = 450;
     for (const e of en) {
-      if (e.dead || (a.t === 'slime' && e.D.fly)) continue; // 슬라임은 날아다니는 적을 못 쫓음
-      const d = Math.abs(e.x - a.x);
+      if (e.dead || (a.t === 'slime' && (e.D.fly || e.y < a.y - 260))) continue;
+      const d = Math.abs(e.x - a.x) + Math.abs(e.y - a.y) * 0.8;
       if (d < bd) { bd = d; tg = e; }
     }
-    const dx = (tg ? tg.x : p.x + a.o) - a.x;
+    const tx = tg ? tg.x : p.x + a.o;
+    // 슬라임: 발판을 뛰어오르내리며 따라옴
+    if (a.t === 'slime') chaseJump(a, dt, tx, tg ? tg.y : p.y, 900);
+    const dx = (a.jx != null ? a.jx : tx) - a.x;
     a.dir = dx > 0 ? 1 : -1;
-    if (tg || Math.abs(dx) > 60) a.x += a.dir * a.sp * dt;
+    if (tg || a.jx != null || Math.abs(dx) > 60) a.x += a.dir * Math.min(a.sp * dt, Math.abs(dx));
     a.x = cl(a.x, 20, WW - 20);
     if (a.t === 'bat') a.y += ((tg ? tg.y - tg.h / 2 : p.y - 90) + Math.sin(a.ph) * 12 - a.y) * dt * 3;
+    else body(a, dt);
     if (tg && a.cd <= 0 && Math.abs(tg.x - a.x) < (tg.w + a.w) / 2 + 4 && Math.abs(tg.y - tg.h / 2 - (a.y - a.h / 2)) < (tg.h + a.h) / 2) {
       a.cd = 0.5;
       hit(tg, dm() * T.sm * (a.t === 'bat' ? 0.7 : 1), a.dir * 120, false, 'sm');
@@ -160,3 +187,4 @@ function updSummons(dt) {
   }
   al = al.filter((a) => a.life > 0);
 }
+

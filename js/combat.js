@@ -13,14 +13,16 @@ function wave(x, y, c, r) { wv.push({ x, y, c, r: r || 120, t: 0 }); }
 function spawn(type, x, opt) {
   const D = ENEMY[type], L = depth(), m = 1 + L * 0.23 + lvl * 0.05;
   const e = {
-    t: type, D, x: x ?? cl(p.x + (R() < 0.5 ? -1 : 1) * (W / 2 + 60), 30, WW - 30), y: GY,
+    t: type, D, x: x ?? cl(p.x + (R() < 0.5 ? -1 : 1) * (W / 2 + 60), 30, WW - 30), y: opt?.y ?? GY, vy: 0, g: 1, jt: 0,
     kx: 0, fl: 0, ph: R() * 6, dir: 1, w: D.w, h: D.h, sp: D.sp * rr(0.85, 1.15),
     dmg: (8 + L * 1.6) * D.dm, hp: D.hp * m, sh: rr(1, 2), ac: 0, cd: rr(1.5, D.cd || 2),
     shd: 0, shdT: 0, bf: 0, cast: 0, frz: 0, burnT: 0, psnT: 0, psnS: 0,
   };
-  if (D.fly) e.y = GY - rr(90, 170);
+  if (D.fly) e.y -= rr(90, 170);
+  // 발판 점프 추격: jump 1 = 항상, 2 = 2월드부터
+  e.jumper = D.jump === 1 || (D.jump === 2 && cur.w >= 1);
   // 정예: 각 월드 3번째 스테이지부터 가끔 등장. 체력 3배, 크고 강하고 보상이 큼
-  if (!opt && !D.minion && D.ai !== 'crystal' && !isBossStage() && cur.s >= 2 && R() < ELITE_CHANCE) {
+  if (!opt?.owner && !D.minion && D.ai !== 'crystal' && !isBossStage() && cur.s >= 2 && R() < ELITE_CHANCE) {
     e.elite = 1; e.hp *= 3; e.dmg *= 1.4; e.w *= 1.25; e.h *= 1.25; e.sp *= 1.1;
   }
   Object.assign(e, opt);
@@ -186,7 +188,7 @@ function summon() {
   if (nw < sn) { for (const a of al) a.hp = a.mh; txt(p.x, p.y - 135, '소환수 회복!', '#9aff9a'); }
   const b0 = al.length;
   for (let i = 0; i < nw; i++) {
-    const bat = (b0 + i) % 2, o = (i - (nw - 1) / 2) * 40, x = p.x + o * 1.2, y = bat ? p.y - 80 : GY;
+    const bat = (b0 + i) % 2, o = (i - (nw - 1) / 2) * 40, x = p.x + o * 1.2, y = bat ? p.y - 80 : p.y;
     const mh = (bat ? 30 : 55) * T.sm * (1 + depth() * 0.13);
     al.push({ t: bat ? 'bat' : 'slime', x, y, w: bat ? 36 : 40, h: bat ? 26 : 32, sp: bat ? 150 : 120, life: 1, ph: R() * 6,
               dir: p.face, cd: 0, o, hp: mh, mh, iv: 0, fl: 0 });
@@ -207,7 +209,7 @@ function atk(m) {
 function cast() {
   if (p.st !== 'n' || p.cd > 0) return;
   p.st = 'cast'; p.t = 0; p.fired = 0; p.kind = 'mag';
-  p.am = mon ? { x: msx + cam, y: msy } : null;
+  p.am = mon ? { x: msx + cam, y: msy + camY } : null;
   if (p.am) p.face = p.am.x > p.x ? 1 : -1;
 }
 

@@ -4,8 +4,10 @@
 
 // ----- 화면 / 월드 크기 -----
 const W = 960, H = 540; // 캔버스 크기
-const GY = 470;         // 땅 높이
-const WW = 2600;        // 스테이지 가로 길이
+// 아래 셋은 스테이지마다 랜덤 맵에 맞춰 바뀜 (map.js)
+let GY = 470;   // 땅 높이
+let WW = 2600;  // 맵 가로 길이
+let MH = 540;   // 맵 세로 길이
 
 // ----- 기본 수치 -----
 const MAG_CD = 0.7; // 마법 기본 쿨타임(초)
@@ -34,11 +36,11 @@ const WORLDS = [
   {
     n: '성교국', boss: 'pope',
     stages: [
-      { n: '순례자의 길', a: '#2a2a10', b: '#0c0c04', e: '#e8d87a', q: 16, pool: ['swordsman', 'archer', 'cleric', 'bard'] },
-      { n: '빛의 묘지', a: '#1a1a2a', b: '#06060c', e: '#b0c0ff', q: 18, pool: ['archer', 'paladin', 'summoner', 'cleric'] },
-      { n: '침묵의 수도원', a: '#14282a', b: '#050c0c', e: '#7ae8d8', q: 21, pool: ['paladin', 'archer', 'cleric', 'warden', 'summoner'] },
-      { n: '성가대 종탑', a: '#2a1420', b: '#0c0408', e: '#ff9ac0', q: 24, pool: ['swordsman', 'bard', 'warden', 'summoner', 'archer'] },
-      { n: '대성당 회랑', a: '#2a1a3a', b: '#0a0612', e: '#c8a0ff', q: 28, pool: ['paladin', 'swordsman', 'cleric', 'bard', 'warden', 'summoner'] },
+      { n: '순례자의 길', a: '#2a2a10', b: '#0c0c04', e: '#e8d87a', q: 16, pool: ['swordsman', 'archer', 'cleric', 'bard', 'zealot'] },
+      { n: '빛의 묘지', a: '#1a1a2a', b: '#06060c', e: '#b0c0ff', q: 18, pool: ['archer', 'paladin', 'summoner', 'cleric', 'zealot'] },
+      { n: '침묵의 수도원', a: '#14282a', b: '#050c0c', e: '#7ae8d8', q: 21, pool: ['paladin', 'archer', 'cleric', 'warden', 'summoner', 'zealot'] },
+      { n: '성가대 종탑', a: '#2a1420', b: '#0c0408', e: '#ff9ac0', q: 24, pool: ['swordsman', 'bard', 'warden', 'summoner', 'archer', 'zealot'] },
+      { n: '대성당 회랑', a: '#2a1a3a', b: '#0a0612', e: '#c8a0ff', q: 28, pool: ['paladin', 'swordsman', 'cleric', 'bard', 'warden', 'summoner', 'zealot', 'zealot'] },
       { n: '대성당 제단', a: '#3a3020', b: '#100c06', e: '#ffe6a0' },
     ],
   },
@@ -46,15 +48,17 @@ const WORLDS = [
 
 // ----- 적 -----
 // hp/sp(속도)/w/h/dm(공격 배율)/xp/gold, look: 외형 번호, ai: 행동 방식, cd: 지원 스킬 쿨타임
+// jump: 1 = 항상 발판으로 점프해서 추격, 2 = 2월드부터 점프 추격
 const ENEMY = {
   farmer:    { hp: 24,  sp: 60,  w: 32, h: 66, dm: 1,   xp: 2, gold: 2, col: '#8a6a3a', look: 0 },
   villager:  { hp: 16,  sp: 100, w: 30, h: 62, dm: 0.8, xp: 1, gold: 2, col: '#6a8aa8', look: 1 },
-  swordsman: { hp: 60,  sp: 75,  w: 36, h: 76, dm: 1.6, xp: 4, gold: 4, col: '#8a8f9a', look: 2 },
+  swordsman: { hp: 60,  sp: 75,  w: 36, h: 76, dm: 1.6, xp: 4, gold: 4, col: '#8a8f9a', look: 2, jump: 2 },
   archer:    { hp: 28,  sp: 55,  w: 32, h: 68, dm: 0.9, xp: 3, gold: 3, col: '#3a7a4a', look: 3, ai: 'archer' },
   paladin:   { hp: 130, sp: 40,  w: 46, h: 84, dm: 1.8, xp: 7, gold: 6, col: '#dcdce8', look: 4 },
   // --- 2월드 지원형 ---
   cleric:    { hp: 45,  sp: 55,  w: 32, h: 70, dm: 0.8, xp: 5, gold: 5, col: '#efe9da', look: 5, ai: 'support', cd: 3.2, role: ['✚', '#7aff8a', '성직자'] },
   bard:      { hp: 40,  sp: 60,  w: 32, h: 68, dm: 0.8, xp: 5, gold: 5, col: '#d0602a', look: 6, ai: 'support', cd: 6,   role: ['♪', '#ffa040', '군악 사제'] },
+  zealot:    { hp: 50,  sp: 125, w: 32, h: 70, dm: 1.3, xp: 5, gold: 5, col: '#3a2a48', look: 9, jump: 1 },
   summoner:  { hp: 50,  sp: 45,  w: 34, h: 72, dm: 0.8, xp: 6, gold: 6, col: '#5a2a90', look: 7, ai: 'support', cd: 5,   role: ['◆', '#c08aff', '소환술사'] },
   warden:    { hp: 70,  sp: 45,  w: 38, h: 74, dm: 1,   xp: 6, gold: 6, col: '#3a5ab0', look: 8, ai: 'support', cd: 5,   role: ['⬡', '#7ac0ff', '수호 사제'] },
   // --- 소환물 / 보스 기믹 ---

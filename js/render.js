@@ -2,33 +2,61 @@
 //  그리기 — 배경, 적, 보스, 소환수, 플레이어, 이펙트, HUD
 // =====================================================================
 
-function bgd() {
+// 하늘·별·산 (화면 좌표, 시차 스크롤)
+function sky() {
   const c = stageDef(), gr = g.createLinearGradient(0, 0, 0, H);
   gr.addColorStop(0, c.a); gr.addColorStop(1, c.b);
   g.fillStyle = gr; g.fillRect(0, 0, W, H);
-  g.fillStyle = '#ffffff14'; g.beginPath(); g.arc(740 - cam * 0.05, 110, 46, 0, 7); g.fill();
+  const span = Math.max(1, MH - H), up = 1 - camY / span; // 0 = 바닥, 1 = 꼭대기
+  g.fillStyle = '#ffffff22';
+  for (let i = 0; i < 40; i++) {
+    const x = (((i * 197.3 - cam * 0.03) % W) + W) % W, y = (((i * 89.7 + camY * 0.05) % H) + H) % H;
+    g.fillRect(x, y, 2, 2);
+  }
+  g.fillStyle = '#ffffff14'; g.beginPath(); g.arc(740 - cam * 0.05, 110 + up * 40, 46, 0, 7); g.fill();
+  const base = H - 70 + (span - camY) * 0.35;
   for (let L = 0; L < 3; L++) {
     g.fillStyle = `rgba(0,0,0,${0.18 + L * 0.16})`;
     const par = 0.15 + L * 0.2, hh = 130 + L * 40;
-    g.beginPath(); g.moveTo(0, GY);
+    g.beginPath(); g.moveTo(0, H);
     for (let x = 0; x <= W; x += 24) {
       const wx = x + cam * par;
-      g.lineTo(x, GY - hh * 0.45 - Math.abs(Math.sin(wx * 0.013 + L * 2) + Math.sin(wx * 0.031 + L)) * hh * 0.28);
+      g.lineTo(x, base - hh * 0.45 - Math.abs(Math.sin(wx * 0.013 + L * 2) + Math.sin(wx * 0.031 + L)) * hh * 0.28);
     }
-    g.lineTo(W, GY); g.fill();
+    g.lineTo(W, H); g.fill();
   }
-  g.fillStyle = '#120a18'; g.fillRect(0, GY, W, H - GY);
+}
+
+// 땅·발판·포털 (월드 좌표, y는 translate로 처리)
+function terrain() {
+  const c = stageDef();
+  g.fillStyle = '#120a18'; g.fillRect(0, GY, W, MH - GY + 60);
   g.fillStyle = c.e + '88'; g.fillRect(0, GY, W, 3);
-  for (const q of pl) { g.fillStyle = '#2a1a34'; g.fillRect(q.x - cam, q.y, q.w, 12); g.fillStyle = c.e + 'aa'; g.fillRect(q.x - cam, q.y, q.w, 3); }
+  // 맵 양 끝 벽
+  if (cam < 10) { g.fillStyle = '#0a0610'; g.fillRect(-cam - 40, 0, 40, MH); }
+  if (cam > WW - W - 10) { g.fillStyle = '#0a0610'; g.fillRect(WW - cam, 0, 40, MH); }
+  for (const q of pl) {
+    const x = q.x - cam;
+    if (x > W || x + q.w < 0 || q.y < camY - 20 || q.y > camY + H + 20) continue;
+    g.fillStyle = '#2a1a34'; g.fillRect(x, q.y, q.w, 14);
+    g.fillStyle = '#1a0f22'; g.fillRect(x + 4, q.y + 14, q.w - 8, 4);
+    if (q.w > 300) { g.fillStyle = '#1a0f2299'; g.fillRect(x + 16, q.y + 14, 8, 26); g.fillRect(x + q.w - 24, q.y + 14, 8, 26); }
+    g.fillStyle = c.e + 'aa'; g.fillRect(x, q.y, q.w, 3);
+  }
   if (portal) {
     const x = portal.x - cam;
-    g.save(); g.translate(x, GY - 70); g.globalCompositeOperation = 'lighter';
+    g.save(); g.translate(x, portal.y - 70); g.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 4; i++) {
       g.strokeStyle = `rgba(${120 + i * 30},80,255,.6)`; g.lineWidth = 4;
       g.beginPath(); g.ellipse(0, 0, 38 - i * 7, 66 - i * 11, time * (i % 2 ? 1 : -1) * 2, 0, 5); g.stroke();
     }
     g.fillStyle = '#8a5aff55'; g.beginPath(); g.ellipse(0, 0, 34, 62, 0, 0, 7); g.fill();
     g.restore();
+  } else if (map && map.portal.y < GY - 50 && !isBossStage()) {
+    // 포털 예정 자리 (닫힌 상태)
+    const x = map.portal.x - cam;
+    g.strokeStyle = '#8a5aff44'; g.lineWidth = 3; g.setLineDash([6, 6]);
+    g.beginPath(); g.ellipse(x, map.portal.y - 70, 30, 56, 0, 0, 7); g.stroke(); g.setLineDash([]);
   }
 }
 
@@ -41,7 +69,7 @@ function glow(x, y, r, rgb, a) {
 // ----- 적 -----
 function drawE(e) {
   const sx = e.x - cam;
-  if (sx < -200 || sx > W + 200) return;
+  if (sx < -200 || sx > W + 200 || e.y < camY - 100 || e.y - e.h > camY + H + 100) return;
   if (e.t === 'boss') return drawBoss(e);
   if (e.t === 'wisp') return drawWisp(e);
   if (e.t === 'crystal') return drawCrystal(e);
@@ -76,6 +104,7 @@ function drawE(e) {
   else if (k === 5) { P('#fff'); g.beginPath(); g.arc(0, -h * 0.88, w * 0.33, Math.PI, 0); g.fill(); P('#d8b050'); g.fillRect(-2, -h * 0.72, 4, h * 0.24); g.fillRect(-w * 0.15, -h * 0.64, w * 0.3, 4); }
   else if (k === 6) { P('#a02020'); g.beginPath(); g.moveTo(-w * 0.36, -h * 0.92); g.lineTo(w * 0.1, -h * 1.12); g.lineTo(w * 0.36, -h * 0.92); g.fill(); S2('#ffe680'); g.lineWidth = 2; g.beginPath(); g.moveTo(w * 0.05, -h * 1.08); g.lineTo(-w * 0.3, -h * 1.22); g.stroke(); }
   else if (k === 7) { P('#3a1a60'); g.beginPath(); g.moveTo(-w * 0.38, -h * 0.78); g.lineTo(-w * 0.05, -h * 1.2); g.lineTo(w * 0.38, -h * 0.78); g.fill(); g.fillStyle = '#c08aff'; g.fillRect(w * 0.04, -h * 0.9, w * 0.1, w * 0.08); }
+  else if (k === 9) { P('#7a1020'); g.beginPath(); g.moveTo(-w * 0.36, -h * 0.78); g.lineTo(-w * 0.1, -h * 1.12); g.lineTo(w * 0.36, -h * 0.8); g.fill(); g.fillStyle = '#ff4a4a'; g.fillRect(w * 0.04, -h * 0.9, w * 0.1, w * 0.08); P('#a01828'); g.fillRect(-w * 0.4, -h * 0.6, w * 0.8, 4); }
   else if (k === 8) { P('#8aa8d8'); g.beginPath(); g.arc(0, -h * 0.9, w * 0.31, Math.PI, 0); g.fill(); P('#d8b050'); g.fillRect(-w * 0.31, -h * 0.9, w * 0.62, 3); }
   // 무기 / 소품
   g.lineWidth = 3; g.beginPath();
@@ -300,7 +329,7 @@ function bar(x, y, w, h, v, c) {
 }
 
 // ----- 레벨업 연출 -----
-function lvDraw() {
+function lvWorld() {
   g.save(); g.globalCompositeOperation = 'lighter';
   for (const r of rg) {
     if (r.t < 0) continue;
@@ -310,6 +339,11 @@ function lvDraw() {
   }
   for (const q of pt) { g.fillStyle = q.c; g.globalAlpha = Math.min(1, q.t * 2); g.fillRect(q.x - cam - 2, q.y - 2, 4, 4); }
   g.globalAlpha = 1;
+  g.restore();
+}
+
+function lvDraw() {
+  g.save(); g.globalCompositeOperation = 'lighter';
   if (state === 'lvfx') {
     const gr = g.createLinearGradient(0, 0, 0, H);
     gr.addColorStop(0, '#ffd84a00'); gr.addColorStop(0.5, `rgba(255,230,140,${0.6 * lt})`); gr.addColorStop(1, '#ffd84a00');
@@ -331,7 +365,9 @@ function lvDraw() {
 function draw() {
   g.save();
   if (shake > 0) g.translate(rr(-4, 4) * shake * 4, rr(-4, 4) * shake * 4);
-  bgd();
+  sky();
+  g.translate(0, -Math.round(camY)); // 여기부터 월드 좌표
+  terrain();
   // 드롭
   for (const d of dr) {
     const x = d.x - cam;
@@ -405,6 +441,7 @@ function draw() {
     g.fillStyle = t.c; g.fillText(t.s, t.x - cam, t.y);
   }
   g.globalAlpha = 1;
+  lvWorld();
   g.restore();
   hud();
   lvDraw();
@@ -434,10 +471,16 @@ function hud() {
     g.textAlign = 'left';
   }
   if (portal) {
-    const px = portal.x - cam;
-    if (px < 30 || px > W - 30) {
-      g.textAlign = px < 30 ? 'left' : 'right'; g.fillStyle = '#b48aff'; g.font = '22px "Do Hyeon",sans-serif';
-      g.fillText(px < 30 ? '◀ 포털' : '포털 ▶', px < 30 ? 16 : W - 16, GY - 60); g.textAlign = 'left';
+    // 화면 밖 포털 방향 표시
+    const px = portal.x - cam, py = portal.y - 70 - camY;
+    if (px < 30 || px > W - 30 || py < 20 || py > H - 20) {
+      const ang = Math.atan2(py - H / 2, px - W / 2);
+      const ex = cl(px, 60, W - 60), ey = cl(py, 150, H - 40);
+      g.save(); g.translate(ex, ey);
+      g.fillStyle = '#b48aff'; g.font = '20px "Do Hyeon",sans-serif'; g.textAlign = 'center';
+      g.fillText('포털', 0, -18);
+      g.rotate(ang); g.beginPath(); g.moveTo(16, 0); g.lineTo(-6, -10); g.lineTo(-6, 10); g.fill();
+      g.restore(); g.textAlign = 'left';
     }
   }
   if (ban) {

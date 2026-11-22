@@ -54,6 +54,7 @@ function updPlayer(dt) {
     for (const q of pl) if (p.x > q.x && p.x < q.x + q.w && py <= q.y && p.y >= q.y) { p.y = q.y; p.vy = 0; p.g = 1; }
   if (p.g) p.jc = 0;
   cam += (cl(p.x - W / 2, 0, WW - W) - cam) * Math.min(1, dt * 6);
+  camY += (cl(p.y - H * 0.62, 0, MH - H) - camY) * Math.min(1, dt * 6);
 }
 
 function stageLogic(dt) {
@@ -65,7 +66,13 @@ function stageLogic(dt) {
   if (kills >= c.q && !portal) openPortal();
   spt -= dt;
   const live = en.filter((e) => !e.D.minion).length;
-  if (spt <= 0 && kills < c.q && live < 6 + depth()) { spt = 1.1; spawn(pickR(c.pool)); }
+  if (spt <= 0 && kills < c.q && live < 6 + Math.round(depth() * 0.6)) {
+    spt = 1.1;
+    // 플레이어와 적당히 떨어진 땅이나 발판 위에 등장
+    const sp = spawnSpot(450, 1100) || spawnSpot(300, 99999);
+    if (sp) spawn(pickR(c.pool), sp.x, { y: sp.y });
+    else spawn(pickR(c.pool));
+  }
 }
 
 function updProjectiles(dt) {
@@ -134,8 +141,11 @@ function updDrops(dt) {
     d.life -= dt;
     if (ds < (d.k === 'b' ? 70 : 110) * T.mag && p.st !== 'dead') { d.x += (dx / ds) * 420 * dt; d.y += (dy / ds) * 420 * dt; d.vy = 0; }
     else {
+      const py = d.y;
       d.vy += 900 * dt; d.y += d.vy * dt;
-      if (d.y > GY - 8) { d.y = GY - 8; d.vy = Math.abs(d.vy) > 80 ? -d.vy * 0.4 : 0; }
+      let fl = GY - 8;
+      if (d.vy > 0) for (const q of pl) if (d.x > q.x && d.x < q.x + q.w && py <= q.y - 8 && d.y >= q.y - 8) { fl = q.y - 8; break; }
+      if (d.y > fl) { d.y = fl; d.vy = Math.abs(d.vy) > 80 ? -d.vy * 0.4 : 0; }
     }
     if (ds < 26) { d.life = 0; pick(d); }
   }
