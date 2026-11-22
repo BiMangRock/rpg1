@@ -76,6 +76,11 @@ function drawE(e) {
 
   const f = e.fl > 0, h = e.h, w = e.w;
   const P = (c) => (g.fillStyle = f ? '#fff' : c), S2 = (c) => (g.strokeStyle = f ? '#fff' : c);
+  // 회피 잔상
+  if (e.ghost && e.ghost.t > 0) {
+    g.fillStyle = `rgba(150,255,255,${e.ghost.t})`;
+    g.fillRect(e.ghost.x - cam - w * 0.4, e.ghost.y - h, w * 0.8, h);
+  }
   // 버프 / 시전 이펙트 (뒤쪽)
   g.save(); g.globalCompositeOperation = 'lighter';
   if (e.star) glow(sx, e.y - h * 0.5, h * (0.6 + e.star * 0.12), e.star >= 4 ? '255,90,60' : '255,200,60', 0.2 + e.star * 0.05 + 0.1 * Math.sin(time * 5));
@@ -106,6 +111,14 @@ function drawE(e) {
   else if (k === 6) { P('#a02020'); g.beginPath(); g.moveTo(-w * 0.36, -h * 0.92); g.lineTo(w * 0.1, -h * 1.12); g.lineTo(w * 0.36, -h * 0.92); g.fill(); S2('#ffe680'); g.lineWidth = 2; g.beginPath(); g.moveTo(w * 0.05, -h * 1.08); g.lineTo(-w * 0.3, -h * 1.22); g.stroke(); }
   else if (k === 7) { P('#3a1a60'); g.beginPath(); g.moveTo(-w * 0.38, -h * 0.78); g.lineTo(-w * 0.05, -h * 1.2); g.lineTo(w * 0.38, -h * 0.78); g.fill(); g.fillStyle = '#c08aff'; g.fillRect(w * 0.04, -h * 0.9, w * 0.1, w * 0.08); }
   else if (k === 9) { P('#7a1020'); g.beginPath(); g.moveTo(-w * 0.36, -h * 0.78); g.lineTo(-w * 0.1, -h * 1.12); g.lineTo(w * 0.36, -h * 0.8); g.fill(); g.fillStyle = '#ff4a4a'; g.fillRect(w * 0.04, -h * 0.9, w * 0.1, w * 0.08); P('#a01828'); g.fillRect(-w * 0.4, -h * 0.6, w * 0.8, 4); }
+  else if (k === 10) {
+    // 닌자: 검은 두건, 눈 틈, 붉은 머플러
+    P('#14141c'); g.beginPath(); g.arc(0, -h * 0.87, w * 0.31, 0, 7); g.fill();
+    g.fillStyle = '#e0c0a0'; g.fillRect(-w * 0.05, -h * 0.9, w * 0.32, w * 0.09);
+    g.fillStyle = '#111'; g.fillRect(w * 0.12, -h * 0.9, w * 0.08, w * 0.06);
+    P('#c01830'); g.fillRect(-w * 0.32, -h * 0.79, w * 0.64, 5);
+    g.fillRect(-w * 0.32 - 14 - Math.sin(time * 14) * 3, -h * 0.79, 14, 4);
+  }
   else if (k === 8) { P('#8aa8d8'); g.beginPath(); g.arc(0, -h * 0.9, w * 0.31, Math.PI, 0); g.fill(); P('#d8b050'); g.fillRect(-w * 0.31, -h * 0.9, w * 0.62, 3); }
   // 무기 / 소품
   g.lineWidth = 3; g.beginPath();
@@ -449,6 +462,12 @@ function draw() {
     if (o.gw) {
       g.fillStyle = '#ffb347'; g.beginPath(); g.ellipse(x, o.y, 16, 24, 0, 0, 7); g.fill();
       g.fillStyle = '#fff6d0'; g.beginPath(); g.ellipse(x, o.y + 4, 7, 14, 0, 0, 7); g.fill();
+      continue;
+    }
+    if (o.sk) {
+      g.save(); g.translate(x, o.y); g.rotate(time * 25); g.fillStyle = '#e8ecf4';
+      for (let i = 0; i < 4; i++) { g.rotate(Math.PI / 2); g.beginPath(); g.moveTo(0, -8); g.lineTo(3, 0); g.lineTo(-3, 0); g.fill(); }
+      g.restore();
       continue;
     }
     const r = o.r || (o.ar ? 5 : 8);

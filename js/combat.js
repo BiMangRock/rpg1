@@ -22,6 +22,8 @@ function spawn(type, x, opt) {
   // 지상 적은 모두 발판 점프 추격 (2월드가 더 높고 자주)
   e.jumper = !D.fly && D.ai !== 'crystal';
   e.jp = cur.w >= 1 ? 980 : 880; e.jcd = cur.w >= 1 ? 0.7 : 1.1;
+  if (D.ev) { e.ev = D.ev; e.evc = 0.5; }
+  if (type === 'ninja') { e.jp = 1080; e.jcd = 0.35; e.mAir = 1; e.shT = rr(1, 2.5); }
   // ★ 몬스터: 일반 적이 가끔 ★1~5로 등장. 별이 많을수록 강하고 보상이 큼
   if (!opt?.owner && !opt?.nostar && !D.minion && D.ai !== 'crystal' && !isBossStage() && R() < STAR_CHANCE * (1 + L * 0.06) * (1 + T.luck)) {
     let st = 1;
@@ -41,6 +43,7 @@ function spawn(type, x, opt) {
     if (e.af.has('haste')) e.sp *= 1.6;
     if (e.af.has('jump')) { e.mAir = 2; e.jp += 120; e.jcd = 0.4; } // 공중에서 2번 더 점프
     e.wvT = 2; e.hsT = 1; e.blT = 3;
+    if (STAR_EVADE[st]) { e.ev = Math.max(e.ev || 0, STAR_EVADE[st]); e.evc = Math.min(e.evc || 9, 1.2); }
   }
   Object.assign(e, opt);
   e.mh = e.hp;
@@ -54,7 +57,7 @@ function melee() {
   fx.push({ a: FR.slash, x: p.x + p.face * 55, y: p.y - 58, d: 0.06, sz: 150, hh: 120, f: -p.face, t: 0 });
   let dealt = 0;
   for (const e of en)
-    if (!e.dead && Math.abs(e.x - x) < 75 + e.w / 2 && e.y > p.y - 130 && e.y - e.h < p.y) dealt += hit(e, dm(), p.face * 260, rollCrit(), 'sw');
+    if (!e.dead && Math.abs(e.x - x) < 75 + e.w / 2 && e.y > p.y - 130 && e.y - e.h < p.y && !evade(e, 'sw')) dealt += hit(e, dm(), p.face * 260, rollCrit(), 'sw');
   if (T.vamp && dealt > 0) heal(dealt * T.vamp);
   // 검기: 적을 관통하며 날아감
   if (T.swave) pr.push({ sw: 1, x: p.x + p.face * 40, y: p.y - 60, vx: p.face * 760, vy: 0, life: 0.5, a: 0, f: p.face, dmg: dm() * T.swave, crit: rollCrit(), hs: new Set() });
@@ -71,11 +74,12 @@ function shoot() {
   p.cd = MAG_CD * T.cdr;
 }
 
-function boom(x, y, d, crit) {
+function boom(x, y, d, crit, direct) {
   const r = 90 * T.area;
   fx.push({ a: FR.exp, x, y, d: 0.07, sz: r * 2, f: 1, t: 0 });
   shake = Math.max(shake, 0.12);
-  for (const e of en) if (Math.hypot(e.x - x, e.y - e.h / 2 - y) < r + e.w / 2) hit(e, d, (e.x > x ? 1 : -1) * 200, crit, 'mg');
+  for (const e of en)
+    if (Math.hypot(e.x - x, e.y - e.h / 2 - y) < r + e.w / 2 && (e === direct || !evade(e, 'pr'))) hit(e, d, (e.x > x ? 1 : -1) * 200, crit, 'mg');
   if (T.chain) chainBolt(x, y, d * 0.6, T.chain);
 }
 
@@ -98,6 +102,21 @@ function chainBolt(x, y, d, n) {
   }
 }
 
+// 회피 (★4·★5, 닌자): 점프+옆으로 튕겨 나가며 잠깐 마법·검 피해 무시
+// kind: 'pr' = 마법구체·검기·폭발, 'sw' = 검
+function evade(e, kind) {
+  if (e.evT > 0) return true;
+  const ch = kind === 'sw' ? e.D.evs || 0 : e.ev || 0;
+  if (!ch || e.evCd > 0 || e.frz > 0 || e.dead || R() >= ch) return false;
+  e.evT = 0.35; e.evCd = e.evc || 1;
+  const away = e.x >= p.x ? 1 : -1;
+  e.kx = away * (e.t === 'ninja' ? 520 : 380);
+  if (e.g !== 0) { e.vy = -620; e.g = 0; }
+  txt(e.x, e.y - e.h - 16, '회피!', '#9affff');
+  e.ghost = { x: e.x, y: e.y, t: 0.3 };
+  return true;
+}
+
 // 빙결: 일반 적은 정지, 보스는 둔화
 function freeze(e, t) {
   if (e.D.ai === 'crystal') return;
@@ -112,6 +131,7 @@ const DMG_COL = { burn: '#ff9a40', psn: '#9aff5a', ch: '#bfe0ff', kb: '#ffb070' 
 function hit(e, d, k = 0, crit, src) {
   if (e.dead) return 0;
   if (e.inv > 0) { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
+  if (e.evT > 0 && (src === 'mg' || src === 'sw')) return 0;
   if (crit) d *= 2 + T.critx;
   if (e.dr) d *= 1 - e.dr;
   if (e.frz > 0 && T.frzB) d *= 1 + T.frzB;
@@ -150,8 +170,9 @@ function kill(e) {
   if (T.ls) heal(T.ls);
   if (!e.D.minion && e.D.ai !== 'crystal') kills++;
   // ★ 보상: 별 수의 제곱에 비례 (★5 = 경험치 13.5배, 골드 16배)
-  const st = e.star || 0, bn = st && T.bounty ? 2 : 1, cy = e.y - e.h / 2;
-  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp * (1 + st * st * 0.5) * bn, x: e.x, y: cy, vy: -200, life: 1e9 });
+  const st = e.star || 0, bn = (st && T.bounty ? 2 : 1) * STAR_BONUS[st], cy = e.y - e.h / 2;
+  if (e.D.xp) dropXP(e.x, cy, e.D.xp * (1 + st * st * 0.5) * bn, st >= 2);
+  if (st >= 4) { shake = Math.max(shake, 0.35); wave(e.x, cy, '#ffd24a', 220); }
   if (e.D.gold) dropGold(e.x, cy, (e.D.gold * (1 + st * st * 0.6) + T.gkill) * bn, st >= 2);
   else if (T.gkill) dropGold(e.x, cy, T.gkill);
   if (T.kboom) kq.push({ x: e.x, y: cy });
@@ -198,18 +219,21 @@ function openChest(c) {
   wave(c.x, c.y - 20, '#ffd24a', 160);
   txt(c.x, c.y - 60, '보물상자!', '#ffd24a');
   dropGold(c.x, c.y - 30, (25 + depth() * 10) * mul, true);
-  for (let i = 0; i < 3; i++) dr.push({ k: 'xp', v: 3 + depth(), x: c.x + rr(-30, 30), y: c.y - 30, vy: rr(-500, -300), life: 1e9 });
+  dropXP(c.x, c.y - 30, (3 + depth()) * 3, true);
   if (R() < 0.35 * mul) dropItem(c.x, c.y - 30, 0);
 }
 
+// 골드·경험치는 양에 비례한 개수로 사방에 쏟아짐 (최대 50개)
+function spray(k, x, y, v, spread) {
+  const n = cl(Math.ceil(v / (k === 'g' ? 3 : 2)), 1, 50), base = v / n, sp = spread ? 1 + Math.min(2, n / 12) : 0.5;
+  for (let i = 0; i < n; i++)
+    dr.push({ k, v: base, x: x + rr(-8, 8), y, vx: rr(-170, 170) * sp, vy: rr(-380, -180) * (spread ? 1.5 : 1), life: 1e9 });
+}
 function dropGold(x, y, v, spread) {
   v = Math.max(1, Math.round(v * rr(0.8, 1.25) * T.gold));
-  while (v > 0) {
-    const c = Math.min(spread ? 15 : 5, v);
-    v -= c;
-    dr.push({ k: 'g', v: c, x: x + (spread ? rr(-80, 80) : rr(-10, 10)), y, vy: spread ? rr(-600, -250) : rr(-320, -200), life: 1e9 });
-  }
+  spray('g', x, y, v, spread);
 }
+function dropXP(x, y, v, spread) { spray('xp', x, y, v, spread); }
 
 // ----- 플레이어 피격 -----
 // 플레이어 피격. src = 때린 적 (★몬스터 특성 적용)

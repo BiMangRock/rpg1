@@ -92,12 +92,16 @@ function updProjectiles(dt) {
     if (o.sw) {
       // 검기: 관통, 적마다 한 번씩
       for (const e of en)
-        if (!e.dead && !o.hs.has(e) && Math.abs(o.x - e.x) < e.w / 2 + 30 && o.y > e.y - e.h - 30 && o.y < e.y + 10) { o.hs.add(e); hit(e, o.dmg, o.f * 160, o.crit, 'sw'); }
+        if (!e.dead && !o.hs.has(e) && Math.abs(o.x - e.x) < e.w / 2 + 30 && o.y > e.y - e.h - 30 && o.y < e.y + 10) { o.hs.add(e); if (!evade(e, 'pr')) hit(e, o.dmg, o.f * 160, o.crit, 'sw'); }
       if (o.life <= 0) o.dead = 1;
       continue;
     }
     for (const e of en)
-      if (!o.dead && !e.dead && Math.abs(o.x - e.x) < e.w / 2 + 14 && o.y > e.y - e.h - 14 && o.y < e.y + 10) { o.dead = 1; boom(o.x, o.y, o.dmg, o.crit); }
+      if (!o.dead && !e.dead && !(o.ig && o.ig.has(e)) && Math.abs(o.x - e.x) < e.w / 2 + 14 && o.y > e.y - e.h - 14 && o.y < e.y + 10) {
+        // ★4·★5·닌자는 날아오는 마법구체를 피할 수 있음 (구체는 그대로 통과)
+        if (evade(e, 'pr')) { (o.ig ||= new Set()).add(e); continue; }
+        o.dead = 1; boom(o.x, o.y, o.dmg, o.crit, e);
+      }
     if ((o.life <= 0 || o.y >= GY - 4) && !o.dead) { o.dead = 1; boom(o.x, Math.min(o.y, GY - 4), o.dmg, o.crit); }
   }
   pr = pr.filter((o) => !o.dead);
@@ -157,9 +161,10 @@ function updDrops(dt) {
     else {
       const py = d.y;
       d.vy += 900 * dt; d.y += d.vy * dt;
+      if (d.vx) { d.x = cl(d.x + d.vx * dt, 10, WW - 10); d.vx *= Math.pow(0.15, dt); }
       let fl = GY - 8;
       if (d.vy > 0) for (const q of pl) if (d.x > q.x && d.x < q.x + q.w && py <= q.y - 8 && d.y >= q.y - 8) { fl = q.y - 8; break; }
-      if (d.y > fl) { d.y = fl; d.vy = Math.abs(d.vy) > 80 ? -d.vy * 0.4 : 0; }
+      if (d.y > fl) { d.y = fl; d.vy = Math.abs(d.vy) > 80 ? -d.vy * 0.4 : 0; if (d.vx) d.vx *= 0.5; }
     }
     if (ds < 26) { d.life = 0; pick(d); }
   }

@@ -21,6 +21,8 @@ const STAR_CHANCE = 0.07;    // 기본 등장 확률 (스테이지가 깊어질�
 const STAR_UP = 0.35;        // 한 단계 더 높은 별이 붙을 확률 (깊어질수록 증가)
 const STAR_ITEM = [0, 0.08, 0.18, 0.32, 0.55, 1]; // 별 수별 장비 드롭 확률 (★5는 확정, 50% 확률로 1개 더)
 const STAR_RELIC = 0.2;      // ★5 처치 시 유물 드롭 확률
+const STAR_BONUS = [1, 1, 1, 1, 1.5, 2]; // ★4·★5는 탄막을 피하는 만큼 보상 추가 배율
+const STAR_EVADE = [0, 0, 0, 0, 0.35, 0.5]; // ★4·★5 탄막 회피 확률
 // 장비 강화 / 칸 확장 (상점)
 const UPG_MAX = 5;           // 최대 +5
 const UPG_STEP = 0.25;       // 강화 1단계마다 효과 +25%
@@ -49,19 +51,19 @@ const WORLDS = [
       { n: '평화로운 마을', a: '#2b1240', b: '#0d0616', e: '#5ad06b', q: 10, pool: ['farmer', 'villager'] },
       { n: '밀밭 언덕', a: '#3a2a14', b: '#100a04', e: '#e8c05a', q: 12, pool: ['farmer', 'villager', 'archer'] },
       { n: '국경 초소', a: '#3a1a2a', b: '#10060c', e: '#d0a05a', q: 15, pool: ['farmer', 'villager', 'swordsman', 'archer'] },
-      { n: '기사단 훈련장', a: '#1a2238', b: '#060812', e: '#a0b0d0', q: 18, pool: ['swordsman', 'archer', 'paladin', 'villager'] },
-      { n: '왕국의 성하', a: '#43121f', b: '#12060a', e: '#e8685a', q: 22, pool: ['swordsman', 'archer', 'paladin', 'farmer'] },
+      { n: '기사단 훈련장', a: '#1a2238', b: '#060812', e: '#a0b0d0', q: 18, pool: ['swordsman', 'archer', 'paladin', 'villager', 'ninja'] },
+      { n: '왕국의 성하', a: '#43121f', b: '#12060a', e: '#e8685a', q: 22, pool: ['swordsman', 'archer', 'paladin', 'farmer', 'ninja'] },
       { n: '용사의 성전', a: '#122244', b: '#050818', e: '#6ab4ff' },
     ],
   },
   {
     n: '성교국', boss: 'pope',
     stages: [
-      { n: '순례자의 길', a: '#2a2a10', b: '#0c0c04', e: '#e8d87a', q: 16, pool: ['swordsman', 'archer', 'cleric', 'bard', 'zealot'] },
+      { n: '순례자의 길', a: '#2a2a10', b: '#0c0c04', e: '#e8d87a', q: 16, pool: ['swordsman', 'archer', 'cleric', 'bard', 'zealot', 'ninja'] },
       { n: '빛의 묘지', a: '#1a1a2a', b: '#06060c', e: '#b0c0ff', q: 18, pool: ['archer', 'paladin', 'summoner', 'cleric', 'zealot'] },
-      { n: '침묵의 수도원', a: '#14282a', b: '#050c0c', e: '#7ae8d8', q: 21, pool: ['paladin', 'archer', 'cleric', 'warden', 'summoner', 'zealot'] },
-      { n: '성가대 종탑', a: '#2a1420', b: '#0c0408', e: '#ff9ac0', q: 24, pool: ['swordsman', 'bard', 'warden', 'summoner', 'archer', 'zealot'] },
-      { n: '대성당 회랑', a: '#2a1a3a', b: '#0a0612', e: '#c8a0ff', q: 28, pool: ['paladin', 'swordsman', 'cleric', 'bard', 'warden', 'summoner', 'zealot', 'zealot'] },
+      { n: '침묵의 수도원', a: '#14282a', b: '#050c0c', e: '#7ae8d8', q: 21, pool: ['paladin', 'archer', 'cleric', 'warden', 'summoner', 'zealot', 'ninja'] },
+      { n: '성가대 종탑', a: '#2a1420', b: '#0c0408', e: '#ff9ac0', q: 24, pool: ['swordsman', 'bard', 'warden', 'summoner', 'archer', 'zealot', 'ninja', 'ninja'] },
+      { n: '대성당 회랑', a: '#2a1a3a', b: '#0a0612', e: '#c8a0ff', q: 28, pool: ['paladin', 'swordsman', 'cleric', 'bard', 'warden', 'summoner', 'zealot', 'zealot', 'ninja'] },
       { n: '대성당 제단', a: '#3a3020', b: '#100c06', e: '#ffe6a0' },
     ],
   },
@@ -79,6 +81,8 @@ const ENEMY = {
   // --- 2월드 지원형 ---
   cleric:    { hp: 45,  sp: 55,  w: 32, h: 70, dm: 0.8, xp: 5, gold: 5, col: '#efe9da', look: 5, ai: 'support', cd: 3.2, role: ['✚', '#7aff8a', '성직자'] },
   bard:      { hp: 40,  sp: 60,  w: 32, h: 68, dm: 0.8, xp: 5, gold: 5, col: '#d0602a', look: 6, ai: 'support', cd: 6,   role: ['♪', '#ffa040', '군악 사제'] },
+  // ev: 마법구체·검기·폭발 회피 확률, evs: 검 회피 확률
+  ninja:     { hp: 42,  sp: 150, w: 30, h: 66, dm: 1.2, xp: 6, gold: 6, col: '#1c1c26', look: 10, ev: 0.75, evs: 0.4 },
   zealot:    { hp: 50,  sp: 125, w: 32, h: 70, dm: 1.3, xp: 5, gold: 5, col: '#3a2a48', look: 9 },
   summoner:  { hp: 50,  sp: 45,  w: 34, h: 72, dm: 0.8, xp: 6, gold: 6, col: '#5a2a90', look: 7, ai: 'support', cd: 5,   role: ['◆', '#c08aff', '소환술사'] },
   warden:    { hp: 70,  sp: 45,  w: 38, h: 74, dm: 1,   xp: 6, gold: 6, col: '#3a5ab0', look: 8, ai: 'support', cd: 5,   role: ['⬡', '#7ac0ff', '수호 사제'] },
@@ -128,7 +132,7 @@ const UPGRADES = [
 //    exe: 체력이 이 비율 이하인 일반 적 즉사 / kboom: 적 처치 시 폭발 (공격력×값)
 //  경제·유틸:
 //    gdup: 골드를 주울 때마다 같은 양 추가 / intr: 스테이지 클리어 시 보유 골드 이자 (최대 800×값)
-//    vac: 포털이 열리면 맵의 드롭을 모두 끌어오고, 포털 진입 시 남은 것 자동 획득
+//    vac: 맵 이동 시 자동 획득하는 남은 경험치·골드 2배 + 포털이 열리면 드롭을 모두 끌어옴
 //    luck: ★몬스터 등장 확률 증가, 장비 드롭 확률 증가 / bounty: ★몬스터 보상 2배
 //    disc: 상점 가격 할인 / freeroll: 상점마다 무료 새로고침 횟수 / clrxp: 클리어 시 레벨업 게이지 획득
 //    chest: 보물상자 항상 등장 + 보상 증가 / gkill: 적 처치 시 골드 추가
@@ -174,7 +178,7 @@ const ITEMS = [
   { id: 'storm',   slot: 'acc', tier: 2, price: 190, n: '폭풍의 인장',    d: '공격 속도 +30%, 폭발 범위 +35%', m: { as: 0.3, area: 0.35 } },
   { id: 'corpse',  slot: 'acc', tier: 2, price: 200, n: '시체 폭발 부적', d: '적 처치 시 💥폭발 (공격력 250% 범위 피해)', m: { kboom: 2.5 } },
   // --- 경제·유틸 장신구 ---
-  { id: 'sack',    slot: 'acc', tier: 1, price: 70,  n: '수집가의 자루',  d: '포털이 열리면 맵의 경험치·골드·아이템을 전부 끌어오고, 포털에 들어가면 남은 것도 자동 획득', m: { vac: 1, mag: 0.3 } },
+  { id: 'sack',    slot: 'acc', tier: 1, price: 70,  n: '수집가의 자루',  d: '맵 이동 시 자동 획득하는 남은 경험치·골드를 2배로 받음, 포털이 열리면 드롭을 전부 끌어옴', m: { vac: 1, mag: 0.3 } },
   { id: 'ledger',  slot: 'acc', tier: 1, price: 100, n: '은행가의 장부',  d: '스테이지 클리어 시 보유 골드의 10% 이자 (최대 80G)', m: { intr: 0.1 } },
   { id: 'clover',  slot: 'acc', tier: 1, price: 90,  n: '네잎 클로버',    d: '★몬스터 등장 확률 +60%, ★몬스터 장비 드롭 +50%', m: { luck: 0.6 } },
   { id: 'goose',   slot: 'acc', tier: 2, price: 180, n: '황금 거위 깃털', d: '골드를 주울 때마다 같은 양을 한 번 더 획득', m: { gdup: 1 } },
@@ -208,7 +212,7 @@ const RELICS = [
   { id: 'stone',  n: '연금술사의 돌',   d: '이자 20% (최대 160G), 골드 +30%', m: { intr: 0.2, gold: 0.3 } },
   { id: 'hoard',  n: '용의 보물더미',   d: '골드를 주울 때마다 같은 양 추가, 보물상자 항상 등장', m: { gdup: 1, chest: 1 } },
   { id: 'star',   n: '떨어진 별',       d: '★몬스터 등장 확률 +100%, 장비 드롭 +80%, 보상 2배', m: { luck: 1, bounty: 1 } },
-  { id: 'vacuum', n: '공허의 아가리',   d: '포털이 열리면 드롭 전부 흡수, 클리어 시 레벨업 게이지 30%', m: { vac: 1, clrxp: 0.3 } },
+  { id: 'vacuum', n: '공허의 아가리',   d: '맵 이동 시 자동 획득 2배, 포털이 열리면 드롭 흡수, 클리어 시 레벨업 게이지 30%', m: { vac: 1, clrxp: 0.3 } },
 ];
 
 const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));

@@ -52,7 +52,7 @@ function pillars(c, d) {
 function bossDown(e) {
   bdone = 1; boss = null; eb = []; hz = [];
   for (const o of en) if (o !== e) o.dead = 1;
-  for (let i = 0; i < 12; i++) dr.push({ k: 'xp', v: 8 + cur.w * 6, x: e.x + rr(-60, 60), y: e.y - 80, vy: rr(-500, -200), life: 1e9 });
+  dropXP(e.x, e.y - 80, 12 * (8 + cur.w * 6), true);
   dropGold(e.x, e.y - 80, [200, 400][cur.w] || 400, true);
   shake = 0.8;
   if (cur.w === WORLDS.length - 1) { ban = { s: '최종 보스 격파!', t: 3 }; winT = 2.5; }

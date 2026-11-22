@@ -68,6 +68,7 @@ function starAI(e, dt, dx) {
 function updEnemies(dt) {
   for (const e of en) {
     e.fl -= dt; e.ph += dt * 3; e.ac -= dt; e.bf -= dt; e.cast -= dt;
+    if (e.ev) { e.evT -= dt; e.evCd -= dt; if (e.ghost) e.ghost.t -= dt; }
     if (e.shdT > 0 && (e.shdT -= dt) <= 0) e.shd = 0;
     // 화상 / 독: 0.5초마다 피해
     if (e.burnT > 0 || e.psnT > 0) {
@@ -133,6 +134,15 @@ function updEnemies(dt) {
         if (!climb(e, spd, dt)) {
           e.dir = tdx > 0 ? 1 : -1;
           if (!a || Math.abs(tdx) > (e.w + a.w) / 2 - 8) stepX(e, e.dir * spd * dt);
+        }
+        // 닌자: 수리검 투척
+        if (e.t === 'ninja' && (e.shT -= dt) <= 0) {
+          const ad = Math.hypot(dx, p.y - e.y);
+          if (ad > 140 && ad < 520) {
+            e.shT = rr(1.8, 2.6);
+            const ang = Math.atan2(p.y - 50 - (e.y - e.h * 0.6), dx);
+            for (const o of [-0.1, 0.1]) eb.push({ x: e.x, y: e.y - e.h * 0.6, vx: Math.cos(ang + o) * 430, vy: Math.sin(ang + o) * 430, life: 2, d: dmg * 0.6, r: 6, c: '#d8dde8', sk: 1, src: e });
+          }
         }
       }
     }

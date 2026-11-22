@@ -155,12 +155,16 @@ function enter() {
 // 스테이지 클리어 정산: 자동 획득, 이자, 경험치
 function stageClear() {
   const msg = [];
-  if (T.vac && dr.length) {
-    let g0 = gold, x0 = xp, n = 0;
-    for (const d of dr) if (d.k !== 'b') { pickRaw(d); n++; }
-    dr = [];
-    if (n) msg.push(`자동 획득 +${gold - g0}G${xp > x0 ? ' · 경험치 ' + Math.round(xp - x0) : ''}`);
+  // 맵에 남은 경험치·골드·장비는 자동 획득 (수집가의 자루: 경험치·골드 한 번 더)
+  const g0 = gold, x0 = xp;
+  let n = 0;
+  for (const d of dr) {
+    if (d.k === 'b') continue;
+    pickRaw(d); n++;
+    if (T.vac && (d.k === 'g' || d.k === 'xp')) pickRaw(d);
   }
+  dr = [];
+  if (n) msg.push(`남은 드롭 자동 획득 +${gold - g0}G · 경험치 +${Math.round(xp - x0)}${T.vac ? ' (자루 ×2)' : ''}`);
   if (T.intr && gold > 0) {
     const v = Math.min(Math.round(gold * T.intr), Math.round(800 * T.intr));
     if (v > 0) { gold += v; msg.push(`이자 +${v}G`); }
