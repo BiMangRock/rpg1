@@ -521,7 +521,7 @@ function jump() {
 // ----- 드롭 / 레벨업 -----
 // 실제 획득 (정산 화면에서도 사용, 레벨업 연출 없이)
 function pickRaw(d) {
-  if (d.k === 'xp') xp += d.v * T.xpm;
+  if (d.k === 'xp') { xp += d.v * T.xpm; runXp += d.v * T.xpm; }
   else if (d.k === 'g') gold = Math.round(gold + d.v * (1 + T.gdup));
   else if (d.k === 'gm') gainGem(d.id);
   else if (d.k === 'rl') {

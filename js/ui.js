@@ -9,14 +9,39 @@ const kl = (k) => ({ ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowD
 const show = (h, panel) => { ov.innerHTML = emo(h); ov.className = panel ? 'panel' : ''; ov.style.display = 'flex'; ov.scrollTop = 0; };
 const hide = () => (ov.style.display = 'none');
 
-// ----- 타이틀 / 키 설정 -----
+// ----- 메인 화면 / 키 설정 -----
 function title() {
+  state = 'title'; mb = {};
   show(`<h1>마왕 연대기</h1>
-  <p>용사 일행을 처단하고 세상을 지배하라.<br>
-  ${kl(KB.L)} ${kl(KB.R)} 이동 · ${kl(KB.jmp)} 점프 (${kl(KB.dn)}+점프: 아래로) · ${kl(KB.por)} 포털·보물상자 · ${kl(KB.sum)} 소환 · ${kl(KB.inv)} 장비창<br>
-  좌클릭 검 (커서 쪽으로 베기) · 우클릭 마법 (커서 방향) · 꾹 누르면 연속 공격<br>
-  <small>키보드로도 가능: ${kl(KB.atk)} 검 · ${kl(KB.mag)} 마법 · Esc 일시정지</small></p>
-  <div class=row><button onclick="start()">모험 시작</button><button onclick="ks('title')">키 설정</button></div>`);
+  <p>용사 일행을 처단하고 세상을 지배하라.</p>
+  <p class=soul>💠 영혼석 <b>${meta.soul}</b></p>
+  <div class="row col"><button class=go onclick="start()">모험 시작</button><button onclick="altar()">영혼의 제단 (영구 강화)</button><button onclick="ks('title')">키 설정</button></div>
+  <p><small>${kl(KB.L)} ${kl(KB.R)} 이동 · ${kl(KB.jmp)} 점프 (${kl(KB.dn)}+점프: 아래로) · ${kl(KB.por)} 포털·보물상자 · ${kl(KB.sum)} 소환 · ${kl(KB.inv)} 장비창<br>
+  좌클릭 검 (커서 쪽으로 베기) · 우클릭 마법 (커서 방향) · 꾹 누르면 연속 공격 · 적에게 커서를 올리면 정보 표시<br>
+  키보드로도 가능: ${kl(KB.atk)} 검 · ${kl(KB.mag)} 마법 · Esc 일시정지</small></p>`);
+}
+
+// ----- 영혼의 제단: 영혼석으로 영구 강화 -----
+function altar() {
+  state = 'title';
+  const cards = META.map((m) => {
+    const L = metaLv(m.id), mx = L >= m.max, c = metaCost(m, L);
+    return `<div class="card meta${mx ? ' eq' : ''}"><small>Lv ${L} / ${m.max}</small><b>${m.n}</b>
+      <div class=d>${m.d(m.v)} / 레벨<br><span class=upg>현재 ${L ? m.d(m.v * L) : '없음'}</span></div>
+      <button class=upgb ${mx || meta.soul < c ? 'disabled' : ''} onclick="buyMeta('${m.id}')">${mx ? '최대' : `💠 ${c}`}</button></div>`;
+  }).join('');
+  show(`<h2>영혼의 제단</h2>
+  <p>쓰러지거나 정복하면 그 판에 모은 경험치의 ${Math.round(SOUL_RATE * 100)}%가 영혼석이 됩니다. 강화는 다음 모험부터 영구 적용.</p>
+  <p class=soul>💠 영혼석 <b>${meta.soul}</b></p>
+  <div class=grid>${cards}</div>
+  <div class=row><button class=go onclick="start()">모험 시작</button><button onclick="title()">메인 화면</button></div>`, true);
+}
+function buyMeta(id) {
+  const m = META.find((x) => x.id === id), L = metaLv(id), c = metaCost(m, L);
+  if (L >= m.max || meta.soul < c) return;
+  meta.soul -= c; meta.lv[id] = L + 1; saveMeta();
+  newRun(); // 배경 캐릭터에도 바로 반영
+  altar();
 }
 
 function ks(f) {
@@ -28,12 +53,14 @@ function ks(f) {
 function rb(a) { wait = a; ks(); }
 function kreset() { KB = { ...KD }; try { localStorage.removeItem('maou_kb2'); } catch (x) {} ks(); }
 function bk() { back === 'pause' ? pauseM() : title(); }
+function toTitle() { newRun(); title(); }
 
 // ----- 일시정지 -----
 function pauseM() {
   state = 'pause'; mb = {};
   show(`<h1>일시정지</h1><p>${stageLabel()} ${stageDef().n} · Lv.${lvl} · <span class=gold>${gold} G</span></p>
-  <div class=row><button onclick="resume()">계속하기</button><button onclick="invMenu()">장비창 (${kl(KB.inv)})</button><button onclick="ks('pause')">키 설정</button></div>`);
+  <p><small>이번 판 영혼석 예상 💠 ${Math.floor(runXp * SOUL_RATE)}</small></p>
+  <div class=row><button onclick="resume()">계속하기</button><button onclick="invMenu()">장비창 (${kl(KB.inv)})</button><button onclick="ks('pause')">키 설정</button><button onclick="giveUp()">포기하고 메인으로</button></div>`);
 }
 
 // ----- 장비창: 게임 중 언제든 (I키) -----
@@ -303,11 +330,13 @@ function equip(id, slot) {
 function unequip(s) { eq[s] = null; recalc(); refreshMenu(); }
 
 // ----- 결과 -----
-function over() {
-  state = 'over';
-  show(`<h1>마왕, 쓰러지다</h1><p>${stageLabel()} ${stageDef().n} · Lv.${lvl} · 유물 ${relics.length}개</p><button onclick="start()">다시 도전</button>`);
+function result(head, sub) {
+  state = 'over'; mb = {};
+  const got = grantSouls();
+  show(`<h1>${head}</h1><p>${sub}</p>
+  <p class=soul>💠 영혼석 +${got} <small>(경험치 ${Math.round(runXp)} × ${Math.round(SOUL_RATE * 100)}%)</small> · 보유 <b>${meta.soul}</b></p>
+  <div class=row><button class=go onclick="start()">다시 도전</button><button onclick="altar()">영혼의 제단</button><button onclick="toTitle()">메인 화면</button></div>`);
 }
-function win() {
-  state = 'over';
-  show(`<h1>VICTORY</h1><p>용사도, 대주교도 쓰러졌습니다. 이제 세상은 마왕의 것입니다.<br>최종 레벨 Lv.${lvl} · 유물 ${relics.length}개 · ${gold} G</p><button onclick="start()">처음부터 다시</button>`);
-}
+function over() { result('마왕, 쓰러지다', `${stageLabel()} ${stageDef().n} · Lv.${lvl} · 유물 ${relics.length}개`); }
+function win() { result('VICTORY', `용사도, 대주교도 쓰러졌습니다. 이제 세상은 마왕의 것입니다.<br>최종 레벨 Lv.${lvl} · 유물 ${relics.length}개 · ${gold} G`); }
+function giveUp() { over(); }

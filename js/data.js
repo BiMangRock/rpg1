@@ -111,6 +111,29 @@ const ENEMY = {
   crystal:   { hp: 150, sp: 0,   w: 40, h: 74, dm: 0,   xp: 3, gold: 10, ai: 'crystal' },
 };
 
+// 마우스를 올렸을 때 보여줄 적 이름
+const ENAME = {
+  farmer: '농부', villager: '마을 주민', swordsman: '검사', archer: '궁수', paladin: '성기사',
+  cleric: '성직자', bard: '군악 사제', ninja: '닌자', zealot: '광신도', summoner: '소환술사', warden: '수호 사제',
+  wisp: '빛의 정령', fsp: '불의 정령', wsp: '물의 정령', tsp: '나무의 정령', crystal: '수정',
+};
+
+// ----- 영혼석 / 영구 강화 (로그라이트) -----
+// 죽거나 클리어하면 이번 판에 모은 경험치의 SOUL_RATE 만큼 영혼석 획득 → 메인 화면 '영혼의 제단'에서 영구 강화
+// cost: 1레벨 가격, inc: 레벨마다 가격 증가, max: 최대 레벨, v: 레벨당 수치, f(S, 수치): 새 판 시작 스탯에 적용
+const SOUL_RATE = 0.1;
+const META = [
+  { id: 'hp',   n: '강인한 육체', d: (v) => `최대 체력 +${v}`,            v: 10,   cost: 5,  inc: 3, max: 30, f: (S, v) => (S.maxhp += v) },
+  { id: 'atk',  n: '마왕의 힘',   d: (v) => `공격력 +${pc(v)}`,            v: 0.01, cost: 6,  inc: 4, max: 50, f: (S, v) => (S.atk *= 1 + v) },
+  { id: 'as',   n: '살의',        d: (v) => `공격 속도 +${pc(v)}`,         v: 0.01, cost: 6,  inc: 4, max: 30, f: (S, v) => (S.as *= 1 + v) },
+  { id: 'spd',  n: '그림자 걸음', d: (v) => `이동 속도 +${pc(v)}`,         v: 0.01, cost: 4,  inc: 3, max: 20, f: (S, v) => (S.spd *= 1 + v) },
+  { id: 'xp',   n: '지식의 갈망', d: (v) => `획득 경험치 +${pc(v)}`,       v: 0.02, cost: 8,  inc: 5, max: 25, f: (S, v) => (S.xpm *= 1 + v) },
+  { id: 'mag',  n: '탐욕의 손길', d: (v) => `획득 범위 +${pc(v)}`,         v: 0.03, cost: 4,  inc: 3, max: 20, f: (S, v) => (S.mag *= 1 + v) },
+  { id: 'gold', n: '숨겨둔 금고', d: (v) => `시작 골드 +${Math.round(v)}`, v: 15,   cost: 5,  inc: 4, max: 20, start: 'gold' },
+];
+const pc = (v) => `${+(v * 100).toFixed(1)}%`;
+const metaCost = (m, lv) => m.cost + m.inc * lv;
+
 // ----- 레벨업 강화 (S = 레벨업으로 쌓이는 기본 스탯) -----
 // w: 나올 확률 가중치 (기본 1), max: 최대 횟수
 const UPGRADES = [

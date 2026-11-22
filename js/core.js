@@ -27,6 +27,20 @@ let lt = 0, lf = 0, sTier = 0;
 const keys = {};
 let mb = {}, msx = 0, msy = 0, mon = 0;
 
+// ----- 영혼석 · 영구 강화 (localStorage에 저장) -----
+let runXp = 0, soulGot = 0; // runXp: 이번 판에 모은 경험치 총량
+const meta = { soul: 0, lv: {} };
+try { Object.assign(meta, JSON.parse(localStorage.getItem('maou_meta') || '{}')); } catch (x) {}
+const saveMeta = () => { try { localStorage.setItem('maou_meta', JSON.stringify(meta)); } catch (x) {} };
+const metaLv = (id) => meta.lv[id] || 0;
+// 판이 끝날 때 한 번만 지급
+function grantSouls() {
+  if (soulGot) return soulGot;
+  soulGot = Math.max(runXp > 0 ? 1 : 0, Math.floor(runXp * SOUL_RATE));
+  meta.soul += soulGot; saveMeta();
+  return soulGot;
+}
+
 // ----- 스테이지 정보 -----
 const stageDef = (c = cur) => WORLDS[c.w].stages[c.s];
 const isBossStage = (c = cur) => c.s === WORLDS[c.w].stages.length - 1;
@@ -106,9 +120,12 @@ function recalc() {
 function newRun() {
   S = { atk: 10, maxhp: 100, spd: 230, as: 1, cdr: 1, area: 1, multi: 0, ls: 0, xpm: 1, jump: 640, mag: 1, mp: 1, mj: 1,
         sn: 3, smax: 10, slv: 0, scd: 1, sm: 1, swd: 1, swr: 1 };
+  // 영구 강화 적용
+  for (const m of META) if (m.f && metaLv(m.id)) m.f(S, m.v * metaLv(m.id));
+  runXp = 0; soulGot = 0;
   sTier = 0;
   lvl = 1; xp = 0; need = 6; upc = {};
-  gold = 0; inv = []; relics = []; stk = {}; gems = []; stock = []; lockd = []; upg = {}; accN = ACC_BASE;
+  gold = Math.round(META.find((m) => m.id === 'gold').v * metaLv('gold')); inv = []; relics = []; stk = {}; gems = []; stock = []; lockd = []; upg = {}; accN = ACC_BASE;
   eq = { wpn: null, arm: null };
   for (let i = 1; i <= accN; i++) eq['acc' + i] = null;
   al = [];
@@ -186,7 +203,7 @@ function stageClear() {
     const v = Math.min(Math.round(gold * T.intr), Math.round(800 * T.intr));
     if (v > 0) { gold += v; msg.push(`이자 +${v}G`); }
   }
-  if (T.clrxp) { xp += need * T.clrxp; msg.push(`레벨업 게이지 +${Math.round(T.clrxp * 100)}%`); }
+  if (T.clrxp) { xp += need * T.clrxp; runXp += need * T.clrxp; msg.push(`레벨업 게이지 +${Math.round(T.clrxp * 100)}%`); }
   clearMsg = msg.join(' · ');
 }
 
