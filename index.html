@@ -1,10 +1,24 @@
 <!DOCTYPE html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>마왕 연대기</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="css/style.css">
-</head><body>
+</head>
+<body>
 <div id="w"><canvas id="c" width="960" height="540"></canvas><div id="ov"></div></div>
+<!-- 순서 중요: 데이터 → 상태 → 로직 → 그리기 → 메뉴 → 시작 -->
 <script src="js/sprites.js"></script>
-<script src="js/game.js"></script>
-</body></html>
+<script src="js/data.js"></script>
+<script src="js/core.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/boss.js"></script>
+<script src="js/update.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
