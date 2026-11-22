@@ -224,6 +224,8 @@ function kill(e, src) {
   // ★ 몬스터는 장비를 떨어뜨릴 수 있음
   if (st && R() < STAR_ITEM[st] * (1 + T.luck * 0.8) * (blade ? 1 + T.swdrop : 1)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
   if (st >= 5 && R() < 0.5) dropItem(e.x + 20, cy, 1);
+  // 닌자 등 보상형 적: 별이 없어도 장비를 떨어뜨릴 수 있음
+  if (e.D.item && R() < e.D.item * (1 + T.luck * 0.8) * (blade ? 1 + T.swdrop : 1)) dropItem(e.x - 20, cy, 0);
   if (st >= 5 && R() < STAR_RELIC * (1 + T.luck * 0.5)) {
     const r = RELICS.filter((r) => !relics.includes(r.id));
     if (r.length) dr.push({ k: 'rl', id: pickR(r).id, x: e.x, y: cy, vy: -500, life: 1e9 });
@@ -281,9 +283,14 @@ function dropXP(x, y, v, spread) { spray('xp', x, y, v, spread); }
 
 // ----- 플레이어 피격 -----
 // 플레이어 피격. src = 때린 적 (★몬스터 특성 적용)
-function hurtP(d, src) {
+function hurtP(d, src, el) {
   if (p.inv > 0 || p.st === 'dead') return;
   if (T.dodge && R() < T.dodge) { p.inv = 0.4; txt(p.x, p.y - 100, '회피!', '#9affff'); return; }
+  // 원소 효과 (법사의 마법·정령): 불 = 화상, 물 = 둔화, 나무 = 독
+  el = el || src?.D?.el;
+  if (el === 'fire') { p.burnD = Math.max(p.burnT > 0 ? p.burnD || 0 : 0, d * 0.25); p.burnT = 3; }
+  else if (el === 'water') { if (!(p.slowT > 0)) txt(p.x, p.y - 135, '💧 둔화', '#6ab4ff'); p.slowT = 2.2; }
+  else if (el === 'wood') { p.psnS = Math.min(5, (p.psnT > 0 ? p.psnS : 0) + 1); p.psnT = 4; p.psnD = Math.max(p.psnD || 0, d * 0.08); }
   const A = src?.af;
   if (A?.has('crit') && R() < 0.3) { d *= 2; txt(p.x, p.y - 118, '치명타!', '#ff4a4a'); }
   d *= (p.b.guard ? 0.4 : 1) * (1 - T.dr);

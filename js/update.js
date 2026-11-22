@@ -150,7 +150,7 @@ function updProjectiles(dt) {
     const od = o.d || 14 + depth() * 1.3, orr = o.r || (o.ar ? 5 : 8);
     if (p.inv <= 0 && p.st !== 'dead' && (o.gw ? Math.abs(o.x - p.x) < 28 && p.y > GY - 46 : Math.hypot(o.x - p.x, o.y - p.y + 45) < orr + 18)) {
       if (!o.gw) o.life = 0;
-      hurtP(od, o.src);
+      hurtP(od, o.src, o.el);
     }
     if (o.life > 0)
       for (const a of al)
@@ -167,8 +167,10 @@ function updProjectiles(dt) {
     if (h.t >= 0 && !h.hit) {
       h.hit = 1;
       shake = Math.max(shake, 0.2);
-      if (Math.abs(p.x - h.x) < 36) hurtP(h.d);
-      for (const a of al) if (Math.abs(a.x - h.x) < 36) hurtA(a, h.d);
+      // 가시덩굴(h.y 있음)은 그 높이 근처만, 빛기둥은 세로 전체
+      const inY = (y) => h.y == null || (y > h.y - 95 && y < h.y + 30);
+      if (Math.abs(p.x - h.x) < 36 && inY(p.y)) hurtP(h.d, null, h.el);
+      for (const a of al) if (Math.abs(a.x - h.x) < 36 && inY(a.y)) hurtA(a, h.d);
     }
   }
   hz = hz.filter((h) => h.t < 0.35);

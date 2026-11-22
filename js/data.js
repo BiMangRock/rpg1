@@ -65,8 +65,8 @@ const WORLDS = [
       { n: '평화로운 마을', a: '#2b1240', b: '#0d0616', e: '#5ad06b', q: 10, pool: ['farmer', 'villager'] },
       { n: '밀밭 언덕', a: '#3a2a14', b: '#100a04', e: '#e8c05a', q: 12, pool: ['farmer', 'villager', 'archer'] },
       { n: '국경 초소', a: '#3a1a2a', b: '#10060c', e: '#d0a05a', q: 15, pool: ['farmer', 'villager', 'swordsman', 'archer'] },
-      { n: '기사단 훈련장', a: '#1a2238', b: '#060812', e: '#a0b0d0', q: 18, pool: ['swordsman', 'archer', 'paladin', 'villager', 'ninja'] },
-      { n: '왕국의 성하', a: '#43121f', b: '#12060a', e: '#e8685a', q: 22, pool: ['swordsman', 'archer', 'paladin', 'farmer', 'ninja'] },
+      { n: '기사단 훈련장', a: '#1a2238', b: '#060812', e: '#a0b0d0', q: 18, pool: ['swordsman', 'archer', 'paladin', 'villager'] },
+      { n: '왕국의 성하', a: '#43121f', b: '#12060a', e: '#e8685a', q: 22, pool: ['swordsman', 'archer', 'paladin', 'farmer'] },
       { n: '용사의 성전', a: '#122244', b: '#050818', e: '#6ab4ff' },
     ],
   },
@@ -96,12 +96,18 @@ const ENEMY = {
   cleric:    { hp: 45,  sp: 55,  w: 32, h: 70, dm: 0.8, xp: 5, gold: 5, col: '#efe9da', look: 5, ai: 'support', cd: 3.2, role: ['✚', '#7aff8a', '성직자'] },
   bard:      { hp: 40,  sp: 60,  w: 32, h: 68, dm: 0.8, xp: 5, gold: 5, col: '#d0602a', look: 6, ai: 'support', cd: 6,   role: ['♪', '#ffa040', '군악 사제'] },
   // ev: 마법구체·검기·폭발 회피 확률, evs: 검 회피 확률
-  ninja:     { hp: 42,  sp: 150, w: 30, h: 66, dm: 1.2, xp: 6, gold: 6, col: '#1c1c26', look: 10, ev: 0.75, evs: 0.4 },
+  // 닌자: 2월드부터 등장. 잡기 어려운 만큼 보상이 큼 (경험치·골드 2배 이상, item: 장비 드롭 확률)
+  ninja:     { hp: 42,  sp: 150, w: 30, h: 66, dm: 1.2, xp: 14, gold: 15, col: '#1c1c26', look: 10, ev: 0.75, evs: 0.4, item: 0.12 },
   zealot:    { hp: 50,  sp: 125, w: 32, h: 70, dm: 1.3, xp: 5, gold: 5, col: '#3a2a48', look: 9 },
-  summoner:  { hp: 50,  sp: 45,  w: 34, h: 72, dm: 0.8, xp: 6, gold: 6, col: '#5a2a90', look: 7, ai: 'support', cd: 5,   role: ['◆', '#c08aff', '소환술사'] },
+  // 소환술사(법사): 정령 소환 + 불·물·나무 원소 마법. ★이 붙을수록 마법 종류·발수·시전 빈도 증가 (ai.js mageCast)
+  summoner:  { hp: 50,  sp: 45,  w: 34, h: 72, dm: 0.8, xp: 7, gold: 7, col: '#5a2a90', look: 7, ai: 'support', cd: 4.2, role: ['◆', '#c08aff', '소환술사'] },
   warden:    { hp: 70,  sp: 45,  w: 38, h: 74, dm: 1,   xp: 6, gold: 6, col: '#3a5ab0', look: 8, ai: 'support', cd: 5,   role: ['⬡', '#7ac0ff', '수호 사제'] },
   // --- 소환물 / 보스 기믹 ---
   wisp:      { hp: 14,  sp: 150, w: 22, h: 22, dm: 0.6, xp: 0, gold: 0, ai: 'wisp', fly: 1, minion: 1 },
+  // 원소 정령 (법사가 소환). el: 닿으면 원소 효과 — 불: 화상 / 물: 둔화 / 나무: 독
+  fsp:       { hp: 18,  sp: 120, w: 24, h: 24, dm: 0.6, xp: 0, gold: 0, ai: 'wisp', fly: 1, minion: 1, el: 'fire' },
+  wsp:       { hp: 24,  sp: 105, w: 24, h: 24, dm: 0.7, xp: 0, gold: 0, ai: 'wisp', fly: 1, minion: 1, el: 'water' },
+  tsp:       { hp: 36,  sp: 85,  w: 26, h: 26, dm: 0.9, xp: 0, gold: 0, ai: 'wisp', fly: 1, minion: 1, el: 'wood' },
   crystal:   { hp: 150, sp: 0,   w: 40, h: 74, dm: 0,   xp: 3, gold: 10, ai: 'crystal' },
 };
 

@@ -52,16 +52,23 @@ function start() { hide(); newRun(); state = 'play'; }
 // ----- 레벨업 -----
 function menu() {
   state = 'lvl'; mb = {};
-  // 가중치(w) 비례로 서로 다른 3개 뽑기
-  const cand = UPGRADES.map((_, i) => i).filter((i) => !UPGRADES[i].max || (upc[i] || 0) < UPGRADES[i].max);
-  opts = [];
-  while (opts.length < 3 && cand.length) {
+  // 선택지 3개: 이미 고른 적 있는 강화 2개 + 랜덤 1개 (빌드가 흩어지지 않게)
+  //  고른 강화가 2개보다 적으면 남는 자리는 랜덤으로 채움. 랜덤은 가중치(w) 비례
+  const ok = (i) => !UPGRADES[i].max || (upc[i] || 0) < UPGRADES[i].max;
+  const roll = (cand) => {
     let r = R() * cand.reduce((s, i) => s + (UPGRADES[i].w || 1), 0), j = 0;
     while ((r -= UPGRADES[cand[j]].w || 1) > 0) j++;
-    opts.push(cand.splice(Math.min(j, cand.length - 1), 1)[0]);
-  }
+    return cand.splice(Math.min(j, cand.length - 1), 1)[0];
+  };
+  const owned = UPGRADES.map((_, i) => i).filter((i) => upc[i] > 0 && ok(i));
+  const fresh = UPGRADES.map((_, i) => i).filter((i) => !(upc[i] > 0) && ok(i));
+  opts = [];
+  while (opts.length < 2 && owned.length) opts.push(roll(owned));
+  // 나머지는 전체에서 랜덤 (이미 뜬 것 제외)
+  const rest = [...owned, ...fresh];
+  while (opts.length < 3 && rest.length) opts.push(roll(rest));
   show(`<h1>LEVEL UP!</h1><p>Lv.${lvl} · 강화를 선택하세요 (1~3 키)</p>
-  <div class=row>${opts.map((k, i) => `<button class=up onclick="pickUp(${i})"><b>${i + 1}. ${UPGRADES[k].n}</b><small>현재 ${upc[k] || 0}단계${UPGRADES[k].sum ? ` · 소환 Lv ${summonLv()}→${summonLv() + 1 + (UPGRADES[k].n.includes('숙련') ? 1 : 0)}` : ''}</small></button>`).join('')}</div>`);
+  <div class=row>${opts.map((k, i) => `<button class=up onclick="pickUp(${i})"><b>${i + 1}. ${UPGRADES[k].n}</b><small>${upc[k] ? `보유 ${upc[k]}단계` : '<span class=gold>새 강화</span>'}${UPGRADES[k].sum ? ` · 소환 Lv ${summonLv()}→${summonLv() + 1 + (UPGRADES[k].n.includes('숙련') ? 1 : 0)}` : ''}</small></button>`).join('')}</div>`);
 }
 function pickUp(i) {
   if (state !== 'lvl') return;

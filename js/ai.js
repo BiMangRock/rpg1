@@ -109,6 +109,12 @@ function updEnemies(dt) {
       e.x += Math.cos(ang) * spd * dt;
       e.y = cl(e.y + (Math.sin(ang) * spd + Math.sin(e.ph * 2) * 30) * dt, 60, GY);
       e.dir = Math.cos(ang) > 0 ? 1 : -1;
+      // 불의 정령: 가끔 작은 화염구 발사
+      if (e.D.el === 'fire' && (e.shT = (e.shT ?? rr(1, 2)) - dt) <= 0 && Math.hypot(dx, p.y - e.y) < 460) {
+        e.shT = rr(2.2, 3);
+        const a2 = Math.atan2(p.y - 50 - (e.y - e.h / 2), dx);
+        eb.push({ x: e.x, y: e.y - e.h / 2, vx: Math.cos(a2) * 300, vy: Math.sin(a2) * 300, life: 2.2, d: e.dmg * 0.7, r: 6, c: '#ff7a3a', el: 'fire', src: e });
+      }
     } else if (ai === 'support') {
       // 지원형: 플레이어와 거리를 두고 주기적으로 스킬 사용
       const ad = Math.abs(dx);
@@ -119,6 +125,9 @@ function updEnemies(dt) {
       }
       e.cd -= dt;
       if (e.cd <= 0 && ad < 700) support(e);
+      // 법사: 연속 시전 대기열
+      if (e.mq?.length) for (const q of e.mq) if ((q.t -= dt) <= 0) { q.done = 1; mageSpell(e, q.k, e.star || 0); }
+      if (e.mq) e.mq = e.mq.filter((q) => !q.done);
     } else {
       // 근접형 / 궁수: 가까운 소환수가 있으면 그쪽을 노림
       const a = nearestSummon(e, Math.min(320, Math.abs(dx) + Math.abs(p.y - e.y) * 1.5));
@@ -177,8 +186,9 @@ function updEnemies(dt) {
 
 // ----- 지원형 적 스킬 -----
 function support(e) {
-  const near = en.filter((o) => !o.dead && o.D.ai !== 'crystal' && o.t !== 'wisp' && Math.abs(o.x - e.x) < 340);
+  const near = en.filter((o) => !o.dead && o.D.ai !== 'crystal' && !o.D.minion && Math.abs(o.x - e.x) < 340);
   e.cd = e.D.cd * rr(0.9, 1.1);
+  if (e.t === 'summoner') return mageCast(e);
   e.cast = 0.6;
   const cy = e.y - e.h / 2;
 
@@ -197,12 +207,6 @@ function support(e) {
     for (const o of near) o.bf = 5;
     wave(e.x, cy, '#ffa040', 340);
     txt(e.x, e.y - e.h - 12, '돌격하라!', '#ffa040');
-  } else if (e.t === 'summoner') {
-    // 빛의 정령 2마리 (최대 4마리)
-    const mine = en.filter((o) => o.owner === e && !o.dead).length;
-    if (mine >= 4) { e.cd = 1.5; e.cast = 0; return; }
-    for (let i = 0; i < 2; i++) spawn('wisp', e.x + (i ? 24 : -24), { y: e.y - e.h - 10, owner: e });
-    wave(e.x, cy, '#c08aff', 140);
   } else if (e.t === 'warden') {
     // 체력 많은 아군 2명에게 보호막 (8초)
     const tg = near.filter((o) => o.shd <= 0).sort((a, b) => b.mh - a.mh).slice(0, 2);
@@ -267,3 +271,65 @@ function updSummons(dt) {
   al = al.filter((a) => a.life > 0);
 }
 
+
+// ----- 소환술사(법사): 정령 소환 + 원소 마법 -----
+// ★이 붙을수록: 시전 간격 짧아짐 (★5 ≈ 2.2배 자주), 한 번에 여러 마법, 발수·정령 수 증가, 새 마법 해금
+//   기본: 빛의 정령 / 원소 정령 / 화염구 / 물결   ★2+: 가시덩굴   ★3+: 불비   (★3 2연속 시전, ★5 3연속)
+const MAGE_SPELL = {
+  wisp: ['빛의 정령!', '#fff0a0'], spirit: ['정령 소환!', '#c08aff'], fire: ['화염구!', '#ff7a3a'],
+  water: ['물결!', '#6ab4ff'], wood: ['가시덩굴!', '#7ad06a'], meteor: ['불비!', '#ff5a2a'],
+};
+function mageCast(e) {
+  const s = e.star || 0, cy = e.y - e.h / 2;
+  e.cd = e.D.cd * rr(0.9, 1.1) / (1 + s * 0.25);
+  const list = ['wisp', 'spirit', 'fire', 'fire', 'water', 'water'];
+  if (s >= 2) list.push('wood', 'wood');
+  if (s >= 3) list.push('meteor', 'meteor');
+  // 정령이 이미 많으면 소환 대신 공격 마법
+  const mine = en.filter((o) => o.owner === e && !o.dead).length, cap = 4 + s;
+  const pool = mine >= cap ? list.filter((k) => k !== 'wisp' && k !== 'spirit') : list;
+  const n = 1 + (s >= 3 ? 1 : 0) + (s >= 5 ? 1 : 0), used = [];
+  for (let i = 0; i < n; i++) {
+    let k, tries = 0;
+    do k = pickR(pool); while (used.includes(k) && ++tries < 10);
+    used.push(k);
+    (e.mq ||= []).push({ k, t: i * 0.45 });
+  }
+  e.cast = 0.6 + (n - 1) * 0.45;
+  wave(e.x, cy, '#c08aff', 120);
+}
+function mageSpell(e, k, s) {
+  const cy = e.y - e.h / 2, ox = e.x, oy = e.y - e.h * 0.7, d = e.dmg;
+  txt(e.x, e.y - e.h - 14, MAGE_SPELL[k][0], MAGE_SPELL[k][1]);
+  if (k === 'wisp') {
+    // 빛의 정령 2마리 (+★2마다 1)
+    for (let i = 0; i < 2 + (s >> 1); i++) spawn('wisp', e.x + (i - 0.5) * 30, { y: e.y - e.h - 10, owner: e });
+    wave(e.x, cy, '#fff0a0', 140);
+  } else if (k === 'spirit') {
+    // 불·물·나무 정령 중 랜덤 1마리 (★3부터 2마리)
+    for (let i = 0; i < 1 + (s >= 3 ? 1 : 0); i++) spawn(pickR(['fsp', 'wsp', 'tsp']), e.x + (i ? 30 : -30), { y: e.y - e.h - 10, owner: e });
+    wave(e.x, cy, '#c08aff', 160);
+  } else if (k === 'fire') {
+    // 화염구 부채꼴 3발 (+★마다 1발)
+    const c = 3 + s, ang = Math.atan2(p.y - 50 - oy, p.x - ox);
+    for (let i = 0; i < c; i++) {
+      const o = (i - (c - 1) / 2) * 0.16;
+      eb.push({ x: ox, y: oy, vx: Math.cos(ang + o) * 320, vy: Math.sin(ang + o) * 320, life: 2.6, d: d * 0.8, r: 9, c: '#ff7a3a', el: 'fire', src: e });
+    }
+  } else if (k === 'water') {
+    // 물결: 세로로 늘어선 물방울 벽이 마왕 쪽으로 밀려옴 (점프로 넘기) — ★2부터 높이 +1, ★4부터 반대쪽에서도
+    const dir = p.x > e.x ? 1 : -1, rows = 4 + (s >= 2 ? 1 : 0), by = p.y - 12;
+    const sides = s >= 4 ? [[e.x, dir], [cl(p.x + dir * 520, 20, WW - 20), -dir]] : [[e.x, dir]];
+    for (const [sx, sd] of sides)
+      for (let i = 0; i < rows; i++)
+        eb.push({ x: sx, y: by - i * 24, vx: sd * 280, vy: 0, life: 3, d: d * 0.6, r: 10, c: '#4aa8ff', el: 'water', src: e });
+  } else if (k === 'wood') {
+    // 가시덩굴: 마왕 발밑에 경고 후 솟아오름 (★마다 범위 증가)
+    const c = 1 + ((s - 1) >> 1) * 2;
+    for (let i = 0; i < c; i++) hz.push({ x: cl(p.x + (i - (c - 1) / 2) * 100, 30, WW - 30), y: p.y, t: -0.85, d: d * 1.1, el: 'wood' });
+  } else if (k === 'meteor') {
+    // 불비: 하늘에서 화염구가 쏟아짐
+    for (let i = 0; i < 3 + s; i++)
+      eb.push({ x: cl(p.x + rr(-220, 220), 20, WW - 20), y: p.y - 520 - rr(0, 200), vx: rr(-30, 30), vy: 330, life: 4, d: d * 0.9, r: 11, c: '#ff5a2a', el: 'fire', src: e });
+  }
+}

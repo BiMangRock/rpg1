@@ -71,7 +71,7 @@ function drawE(e) {
   const sx = e.x - cam;
   if (sx < -200 || sx > W + 200 || e.y < camY - 100 || e.y - e.h > camY + H + 100) return;
   if (e.t === 'boss') return drawBoss(e);
-  if (e.t === 'wisp') return drawWisp(e);
+  if (e.D.ai === 'wisp') return drawWisp(e);
   if (e.t === 'crystal') return drawCrystal(e);
 
   const f = e.fl > 0, h = e.h, w = e.w;
@@ -218,13 +218,23 @@ function hexRgb(h) {
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 }
 
+// 정령 색: [꼬리 glow, 몸 glow, 핵]
+const SPIRIT_COL = {
+  fire: ['255,120,40', '255,150,60', '#ffd0a0'], water: ['80,160,255', '110,190,255', '#d0ecff'],
+  wood: ['90,200,80', '120,220,100', '#d8ffc8'],
+};
 function drawWisp(e) {
-  const sx = e.x - cam, y = e.y - e.h / 2;
+  const sx = e.x - cam, y = e.y - e.h / 2, C = SPIRIT_COL[e.D.el] || ['255,230,140', '255,240,170', '#fff6d0'];
+  const sz = e.D.el ? 1.25 : 1;
   g.save(); g.globalCompositeOperation = 'lighter';
-  glow(sx - e.dir * 12, y + 2, 16, '255,230,140', 0.35);
-  glow(sx, y, 22, '255,240,170', 0.8);
-  g.fillStyle = e.fl > 0 ? '#fff' : '#fff6d0';
-  g.beginPath(); g.arc(sx, y, 6 + Math.sin(e.ph * 4), 0, 7); g.fill();
+  glow(sx - e.dir * 12, y + 2, 16 * sz, C[0], 0.35);
+  glow(sx, y, 22 * sz, C[1], 0.8);
+  g.fillStyle = e.fl > 0 ? '#fff' : C[2];
+  g.beginPath(); g.arc(sx, y, (6 + Math.sin(e.ph * 4)) * sz, 0, 7); g.fill();
+  if (e.D.el === 'wood') { // 나뭇잎 두 장
+    g.fillStyle = '#7ad06a';
+    for (const d of [-1, 1]) { g.beginPath(); g.ellipse(sx + d * 9, y - 6, 6, 3, d * 0.6, 0, 7); g.fill(); }
+  }
   g.restore();
   drawStatus(e);
 }
@@ -303,6 +313,18 @@ function drawHazards() {
   for (const h of hz) {
     const x = h.x - cam;
     g.save();
+    if (h.el === 'wood') {
+      // 가시덩굴: 발밑 초록 경고 → 가시가 솟음
+      if (h.t < 0) {
+        g.fillStyle = `rgba(90,220,80,${0.35 + 0.25 * Math.sin(time * 30)})`; g.fillRect(x - 34, h.y - 6, 68, 6);
+      } else {
+        const k = Math.min(1, h.t / 0.08), a = Math.max(0, 1 - h.t / 0.35);
+        g.globalAlpha = a; g.fillStyle = '#4a9a3a';
+        for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(x + i * 13 - 7, h.y); g.lineTo(x + i * 13, h.y - (90 - Math.abs(i) * 18) * k); g.lineTo(x + i * 13 + 7, h.y); g.fill(); }
+      }
+      g.restore();
+      continue;
+    }
     if (h.t < 0) {
       const k = 1 + h.t / 0.9;
       g.fillStyle = `rgba(255,60,60,${0.12 + 0.18 * k + 0.08 * Math.sin(time * 30)})`; g.fillRect(x - 34, 0, 68, GY);
