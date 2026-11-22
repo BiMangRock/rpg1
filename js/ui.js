@@ -5,7 +5,7 @@ let KB = { ...KD }, wait = null, back = 'title', shopTab = 'shop';
 try { Object.assign(KB, JSON.parse(localStorage.getItem('maou_kb2') || '{}')); } catch (x) {}
 
 const kl = (k) => ({ ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓' }[k] || String(k).replace(/^(Key|Digit)/, ''));
-const show = (h, panel) => { ov.innerHTML = h; ov.className = panel ? 'panel' : ''; ov.style.display = 'flex'; ov.scrollTop = 0; };
+const show = (h, panel) => { ov.innerHTML = emo(h); ov.className = panel ? 'panel' : ''; ov.style.display = 'flex'; ov.scrollTop = 0; };
 const hide = () => (ov.style.display = 'none');
 
 // ----- 타이틀 / 키 설정 -----
@@ -87,7 +87,7 @@ function relicMenu() {
   if (!relicOpts.length) return shopMenu('shop', true);
   state = 'relic'; ban = null;
   show(`<h1>클리어 보상</h1><p>${WORLDS[cur.w].n} 정복! 유물 하나를 선택하세요 (1~3 키) — 장착 없이 영구 적용</p>${clearMsg ? `<p class=gold>${clearMsg}</p>` : ''}
-  <div class=grid>${relicOpts.map((r, i) => `<div class="card relic" onclick="pickRelic(${i})"><small>유물 ${i + 1}</small><b>${r.n}</b><div class=d>${r.d}</div><button>선택</button></div>`).join('')}</div>`, true);
+  <div class=grid>${relicOpts.map((r, i) => `<div class="card relic" onclick="pickRelic(${i})"><small>유물 ${i + 1}</small><div class=ch>${icImg(relicIcon(r), 'icn')}<b>${r.n}</b></div><div class=d>${r.d}</div><button>선택</button></div>`).join('')}</div>`, true);
 }
 function pickRelic(i) {
   if (state !== 'relic' || !relicOpts[i]) return;
@@ -128,7 +128,7 @@ function shopMenu(tab, fresh) {
 const card = (it, btn, cls = '') => {
   const L = upg[it.id] || 0;
   return `<div class="card t${it.tier} ${cls}"><small>${SLOT[it.slot]} · <span class=tier>${'★'.repeat(it.tier)} ${TIER_NAME[it.tier]}</span></small>` +
-    `<b>${it.n}${L ? ` <span class=upg>+${L}</span>` : ''}</b><div class=d>${it.d}${L ? `<br><span class=upg>강화 효과 ×${(1 + UPG_STEP * L).toFixed(2)}${L >= 3 ? ' · 개수형 +' + Math.floor(L / 3) : ''}</span>` : ''}</div>${btn}</div>`;
+    `<div class=ch>${icImg(itemIcon(it), 'icn')}<b>${it.n}${L ? ` <span class=upg>+${L}</span>` : ''}</b></div><div class=d>${it.d}${L ? `<br><span class=upg>강화 효과 ×${(1 + UPG_STEP * L).toFixed(2)}${L >= 3 ? ' · 개수형 +' + Math.floor(L / 3) : ''}</span>` : ''}</div>${btn}</div>`;
 };
 // 강화 비용 / 장신구 칸 확장 비용
 const upgCost = (id) => Math.round(ITEM[id].price * UPG_COST * ((upg[id] || 0) + 1) * (1 - T.disc));
@@ -189,7 +189,7 @@ function equipHTML() {
 
 function relicHTML() {
   if (!relics.length) return '<p>아직 유물이 없어요. 보스를 쓰러뜨리면 하나를 골라 얻을 수 있어요.</p>';
-  return `<div class=grid>${relics.map((id) => `<div class="card relic"><small>유물</small><b>${RELIC[id].n}</b><div class=d>${RELIC[id].d}</div></div>`).join('')}</div>`;
+  return `<div class=grid>${relics.map((id) => `<div class="card relic"><small>유물</small><div class=ch>${icImg(relicIcon(RELIC[id]), 'icn')}<b>${RELIC[id].n}</b></div><div class=d>${RELIC[id].d}</div></div>`).join('')}</div>`;
 }
 
 function statsHTML() {

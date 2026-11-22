@@ -175,22 +175,23 @@ function drawStatus(e) {
   }
   if (e.stn > 0) {
     g.font = '14px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffe680';
-    g.fillText('✦ 기절 ✦', sx + Math.sin(time * 10) * 4, e.y - e.h - 12); g.textAlign = 'left';
+    richText('✦ 기절 ✦', sx + Math.sin(time * 10) * 4, e.y - e.h - 12); g.textAlign = 'left';
   }
   if (e.psnT > 0 && e.psnS > 1) {
     g.font = '13px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#9aff5a';
-    g.fillText('☠' + e.psnS, sx + e.w * 0.6 + 6, e.y - e.h + 4); g.textAlign = 'left';
+    richText('☠' + e.psnS, sx + e.w * 0.6 + 6, e.y - e.h + 4); g.textAlign = 'left';
   }
   if (e.star) {
-    const s = '★'.repeat(e.star);
+    // 별 아이콘 (★4·★5는 붉은 빛)
+    const ss = 15, y0 = e.y - e.h - 33;
+    if (e.star >= 4) { g.save(); g.globalCompositeOperation = 'lighter'; glow(sx, y0, ss * e.star * 0.7, '255,90,40', 0.35); g.restore(); }
+    for (let i = 0; i < e.star; i++) drawIcon('st_star', sx + (i - (e.star - 1) / 2) * (ss - 2), y0, ss);
     g.font = '14px "Do Hyeon",sans-serif'; g.textAlign = 'center';
-    g.fillStyle = '#000'; g.fillText(s, sx + 1, e.y - e.h - 27);
-    g.fillStyle = e.star >= 4 ? '#ff7a4a' : '#ffd24a'; g.fillText(s, sx, e.y - e.h - 28);
     if (e.af?.size) {
       const t = [...e.af].map((a) => AFFIX[a]).join(' · ');
       g.font = '11px "Do Hyeon",sans-serif';
-      g.fillStyle = '#000'; g.fillText(t, sx + 1, e.y - e.h - 43);
-      g.fillStyle = '#ffe0a0'; g.fillText(t, sx, e.y - e.h - 44);
+      g.fillStyle = '#000'; g.fillText(t, sx + 1, e.y - e.h - 46);
+      g.fillStyle = '#ffe0a0'; g.fillText(t, sx, e.y - e.h - 47);
     }
     g.textAlign = 'left';
   }
@@ -202,10 +203,12 @@ function drawStatus(e) {
     g.restore();
   }
   if (e.D.role) {
-    g.font = '16px "Do Hyeon",sans-serif'; g.textAlign = 'center';
-    g.fillStyle = '#000'; g.fillText(e.D.role[0], sx + 1, e.y - e.h - 13);
-    g.fillStyle = e.D.role[1]; g.fillText(e.D.role[0], sx, e.y - e.h - 14);
-    g.textAlign = 'left';
+    if (!drawIcon(EMO[e.D.role[0]], sx, e.y - e.h - 20, 20)) {
+      g.font = '16px "Do Hyeon",sans-serif'; g.textAlign = 'center';
+      g.fillStyle = '#000'; g.fillText(e.D.role[0], sx + 1, e.y - e.h - 13);
+      g.fillStyle = e.D.role[1]; g.fillText(e.D.role[0], sx, e.y - e.h - 14);
+      g.textAlign = 'left';
+    }
   }
   if (e.t !== 'boss' && e.hp < e.mh) {
     bar(sx - 18, e.y - e.h - 8, 36, 4, e.hp / e.mh, '#e04a4a');
@@ -511,9 +514,11 @@ function draw() {
       // 장비: 등급 색으로 빛나는 상자
       const tc = ['255,255,255', '200,230,255', '220,160,255', '255,180,90'][ITEM[d.id].tier];
       g.save(); g.globalCompositeOperation = 'lighter'; glow(x, d.y, 30, tc, 0.7 + 0.2 * Math.sin(time * 6)); g.restore();
-      g.fillStyle = `rgb(${tc})`; g.fillRect(x - 8, d.y - 8, 16, 16);
-      g.fillStyle = '#1a0f22'; g.fillRect(x - 5, d.y - 5, 10, 10);
-      g.fillStyle = `rgb(${tc})`; g.fillRect(x - 2, d.y - 2, 4, 4);
+      if (!drawIcon(itemIcon(ITEM[d.id]), x, d.y - 4 + Math.sin(time * 4 + d.x) * 2, 30)) {
+        g.fillStyle = `rgb(${tc})`; g.fillRect(x - 8, d.y - 8, 16, 16);
+        g.fillStyle = '#1a0f22'; g.fillRect(x - 5, d.y - 5, 10, 10);
+        g.fillStyle = `rgb(${tc})`; g.fillRect(x - 2, d.y - 2, 4, 4);
+      }
       continue;
     }
     if (d.k === 'g') {
@@ -525,6 +530,7 @@ function draw() {
     const c = d.k === 'xp' ? '#66aaff' : BF[d.b][1], r = d.k === 'xp' ? 6 : 10 + Math.sin(time * 8) * 2;
     glow(x, d.y, r * 2.2, hexRgb(c), 1);
     g.restore();
+    if (d.k !== 'xp') drawIcon('bf_' + d.b, x, d.y, 22);
   }
   drawHazards();
   for (const c of chests) {
@@ -609,8 +615,7 @@ function draw() {
   g.font = '18px "Do Hyeon",sans-serif'; g.textAlign = 'center';
   for (const t of tx) {
     g.globalAlpha = Math.min(1, t.t * 2);
-    g.fillStyle = '#000'; g.fillText(t.s, t.x - cam + 1, t.y + 1);
-    g.fillStyle = t.c; g.fillText(t.s, t.x - cam, t.y);
+    g.fillStyle = t.c; richText(t.s, t.x - cam, t.y, 1);
   }
   g.globalAlpha = 1;
   lvWorld();
@@ -644,13 +649,17 @@ function hud() {
   if (p.slowT > 0) sts.push(['❄ 둔화', '#9ad8ff']);
   if (p.burnT > 0) sts.push(['🔥 화상', '#ff9a40']);
   if (p.psnT > 0) sts.push([`☠ 독 ${p.psnS}`, '#9aff5a']);
-  sts.forEach(([t, c], i) => { g.fillStyle = c; g.fillText(t, 244 + i * 64, 27); });
+  sts.forEach(([t, c], i) => { g.fillStyle = c; richText(t, 244 + i * 70, 27); });
   g.fillStyle = '#fff';
   let bx = 16;
-  for (const k in p.b) { g.fillStyle = BF[k][1]; g.fillRect(bx, 116, 18, 18); g.fillStyle = '#fff'; g.fillText(Math.ceil(p.b[k]), bx + 22, 130); bx += 56; }
+  for (const k in p.b) {
+    if (!drawIcon('bf_' + k, bx + 11, 125, 24)) { g.fillStyle = BF[k][1]; g.fillRect(bx, 116, 18, 18); }
+    g.fillStyle = '#fff'; g.fillText(Math.ceil(p.b[k]), bx + 26, 130); bx += 60;
+  }
   // 골드 / 유물
   g.textAlign = 'right'; g.font = '20px "Do Hyeon",sans-serif'; g.fillStyle = '#ffd24a';
   g.fillText(`${gold} G`, W - 16, 30);
+  drawIcon('ui_gold', W - 30 - g.measureText(`${gold} G`).width, 23, 26);
   if (relics.length) { g.font = '14px "Do Hyeon",sans-serif'; g.fillStyle = '#c88aff'; g.fillText(`유물 ${relics.length}개`, W - 16, 50); }
   g.textAlign = 'left';
   if (!boss) minimap();
