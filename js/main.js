@@ -15,7 +15,8 @@ onkeydown = (e) => {
   if (/Arrow|Space/.test(k) || Object.values(KB).includes(k)) e.preventDefault();
   keys[k] = 1;
   if (e.repeat) return;
-  if (k === 'Escape') { if (state === 'play') pauseM(); else if (state === 'pause') resume(); return; }
+  if (k === 'Escape') { if (state === 'play') pauseM(); else if (state === 'pause' || state === 'inv') resume(); return; }
+  if (k === KB.inv && (state === 'play' || state === 'inv')) { state === 'inv' ? resume() : invMenu(); return; }
   if (state === 'lvl' && /Digit[123]/.test(k)) return pickUp(+k[5] - 1);
   if (state === 'relic' && /Digit[123]/.test(k)) return pickRelic(+k[5] - 1);
   if (state === 'shop' && (k === 'Enter' || k === 'NumpadEnter')) return nextStage();
@@ -24,7 +25,10 @@ onkeydown = (e) => {
   if (k === KB.atk) atk();
   if (k === KB.mag) cast();
   if (k === KB.sum) { if (p.sc > 0) txt(p.x, p.y - 110, '소환 대기 ' + p.sc.toFixed(1) + '초', '#9a8aaa'); else sumCast(); }
-  if (k === KB.por) enter();
+  if (k === KB.por) {
+    const c = chests.find((c) => !c.open && Math.abs(p.x - c.x) < 60 && Math.abs(p.y - c.y) < 60);
+    if (c) openChest(c); else enter();
+  }
 };
 onkeyup = (e) => (keys[e.code] = 0);
 onblur = () => { for (const k in keys) keys[k] = 0; mb = {}; };

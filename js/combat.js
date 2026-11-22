@@ -21,9 +21,13 @@ function spawn(type, x, opt) {
   if (D.fly) e.y -= rr(90, 170);
   // 발판 점프 추격: jump 1 = 항상, 2 = 2월드부터
   e.jumper = D.jump === 1 || (D.jump === 2 && cur.w >= 1);
-  // 정예: 각 월드 3번째 스테이지부터 가끔 등장. 체력 3배, 크고 강하고 보상이 큼
-  if (!opt?.owner && !D.minion && D.ai !== 'crystal' && !isBossStage() && cur.s >= 2 && R() < ELITE_CHANCE) {
-    e.elite = 1; e.hp *= 3; e.dmg *= 1.4; e.w *= 1.25; e.h *= 1.25; e.sp *= 1.1;
+  // ★ 몬스터: 일반 적이 가끔 ★1~5로 등장. 별이 많을수록 강하고 보상이 큼
+  if (!opt?.owner && !D.minion && D.ai !== 'crystal' && !isBossStage() && R() < STAR_CHANCE * (1 + L * 0.06) * (1 + T.luck)) {
+    let st = 1;
+    while (st < 5 && R() < STAR_UP + L * 0.02) st++;
+    e.star = st;
+    e.hp *= 1 + st * 0.7; e.dmg *= 1 + st * 0.12; e.sp *= 1 + st * 0.03;
+    e.w *= 1 + st * 0.06; e.h *= 1 + st * 0.06;
   }
   Object.assign(e, opt);
   e.mh = e.hp;
@@ -124,11 +128,39 @@ function kill(e) {
   if (e.t === 'boss') return bossDown(e);
   if (T.ls) heal(T.ls);
   if (!e.D.minion && e.D.ai !== 'crystal') kills++;
-  const el = e.elite ? 4 : 1;
-  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp * el, x: e.x, y: e.y - e.h / 2, vy: -200, life: 1e9 });
-  if (e.D.gold) dropGold(e.x, e.y - e.h / 2, e.D.gold * (e.elite ? 5 : 1), e.elite);
-  if (T.kboom) kq.push({ x: e.x, y: e.y - e.h / 2 });
-  if (!e.D.minion && (e.elite || R() < 0.15)) dr.push({ k: 'b', b: pickR(Object.keys(BF)), x: e.x, y: e.y - e.h / 2, vy: -300, life: 12 });
+  const st = e.star || 0, bn = st && T.bounty ? 2 : 1, cy = e.y - e.h / 2;
+  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp * (1 + st) * bn, x: e.x, y: cy, vy: -200, life: 1e9 });
+  if (e.D.gold) dropGold(e.x, cy, (e.D.gold * (1 + st * 1.2) + T.gkill) * bn, st >= 2);
+  else if (T.gkill) dropGold(e.x, cy, T.gkill);
+  if (T.kboom) kq.push({ x: e.x, y: cy });
+  if (!e.D.minion && (st >= 3 || R() < 0.15)) dr.push({ k: 'b', b: pickR(Object.keys(BF)), x: e.x, y: cy, vy: -300, life: 12 });
+  // ★ 몬스터는 장비를 떨어뜨릴 수 있음
+  if (st && R() < st * STAR_ITEM * (1 + T.luck * 0.8)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
+  if (st >= 3) txt(e.x, e.y - e.h - 30, '★'.repeat(st) + ' 처치!', '#ffd24a');
+}
+
+// 아직 없는 장비 중 하나 (bonus: 한 등급 위까지 허용)
+function randItem(bonus) {
+  const cap = Math.min(3, tierCap(cur) + (bonus || 0));
+  const pool = ITEMS.filter((i) => i.tier <= cap && !inv.includes(i.id) && !dr.some((d) => d.id === i.id));
+  return pool.length ? pickR(pool).id : null;
+}
+function dropItem(x, y, bonus) {
+  const id = randItem(bonus);
+  if (id) dr.push({ k: 'it', id, x, y, vy: -420, life: 1e9 });
+  else dropGold(x, y, 40, true); // 살 장비가 없으면 골드로
+}
+
+// 보물상자
+function openChest(c) {
+  c.open = 1;
+  const mul = 1 + T.chest * 0.5;
+  shake = 0.25;
+  wave(c.x, c.y - 20, '#ffd24a', 160);
+  txt(c.x, c.y - 60, '보물상자!', '#ffd24a');
+  dropGold(c.x, c.y - 30, (25 + depth() * 10) * mul, true);
+  for (let i = 0; i < 3; i++) dr.push({ k: 'xp', v: 3 + depth(), x: c.x + rr(-30, 30), y: c.y - 30, vy: rr(-500, -300), life: 1e9 });
+  if (R() < 0.35 * mul) dropItem(c.x, c.y - 30, 0);
 }
 
 function dropGold(x, y, v, spread) {
@@ -225,9 +257,22 @@ function jump() {
 }
 
 // ----- 드롭 / 레벨업 -----
+// 실제 획득 (정산 화면에서도 사용, 레벨업 연출 없이)
+function pickRaw(d) {
+  if (d.k === 'xp') xp += d.v * T.xpm;
+  else if (d.k === 'g') gold += d.v * (1 + T.gdup);
+  else if (d.k === 'it') {
+    if (inv.includes(d.id)) { gold += 40; return; }
+    inv.push(d.id);
+    lockd = lockd.filter((x) => x !== d.id);
+    const it = ITEM[d.id], empty = slotsFor(it).find((s) => !eq[s]);
+    if (empty) { eq[empty] = d.id; recalc(); }
+    txt(p.x, p.y - 130, `장비 획득! ${it.n}${empty ? ' (장착)' : ''}`, ['#fff', '#cfe6ff', '#e0b0ff', '#ffc070'][it.tier]);
+  }
+}
+
 function pick(d) {
-  if (d.k === 'xp') { xp += d.v * T.xpm; chk(); }
-  else if (d.k === 'g') gold += d.v;
+  if (d.k !== 'b') { pickRaw(d); if (d.k === 'xp') chk(); }
   else {
     p.b[d.b] = 12;
     txt(p.x, p.y - 110, BF[d.b][0] + '!', BF[d.b][1]);

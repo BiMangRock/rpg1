@@ -139,7 +139,11 @@ function updDrops(dt) {
   for (const d of dr) {
     const dx = p.x - d.x, dy = p.y - 45 - d.y, ds = Math.hypot(dx, dy) || 1;
     d.life -= dt;
-    if (ds < (d.k === 'b' ? 70 : 110) * T.mag && p.st !== 'dead') { d.x += (dx / ds) * 420 * dt; d.y += (dy / ds) * 420 * dt; d.vy = 0; }
+    const vac = T.vac && portal && d.k !== 'b';
+    if (vac || (ds < (d.k === 'b' ? 70 : 110) * T.mag && p.st !== 'dead')) {
+      const sp = vac ? Math.max(900, ds * 2.5) : 420;
+      d.x += (dx / ds) * sp * dt; d.y += (dy / ds) * sp * dt; d.vy = 0;
+    }
     else {
       const py = d.y;
       d.vy += 900 * dt; d.y += d.vy * dt;

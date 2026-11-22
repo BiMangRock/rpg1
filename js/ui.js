@@ -12,7 +12,7 @@ const hide = () => (ov.style.display = 'none');
 function title() {
   show(`<h1>마왕 연대기</h1>
   <p>용사 일행을 처단하고 세상을 지배하라.<br>
-  ${kl(KB.L)} ${kl(KB.R)} 이동 · ${kl(KB.jmp)} 점프 (${kl(KB.dn)}+점프: 아래로) · ${kl(KB.por)} 포털 · ${kl(KB.sum)} 소환<br>
+  ${kl(KB.L)} ${kl(KB.R)} 이동 · ${kl(KB.jmp)} 점프 (${kl(KB.dn)}+점프: 아래로) · ${kl(KB.por)} 포털·보물상자 · ${kl(KB.sum)} 소환 · ${kl(KB.inv)} 장비창<br>
   좌클릭 검 (커서 쪽으로 베기) · 우클릭 마법 (커서 방향) · 꾹 누르면 연속 공격<br>
   <small>키보드로도 가능: ${kl(KB.atk)} 검 · ${kl(KB.mag)} 마법 · Esc 일시정지</small></p>
   <div class=row><button onclick="start()">모험 시작</button><button onclick="ks('title')">키 설정</button></div>`);
@@ -32,11 +32,19 @@ function bk() { back === 'pause' ? pauseM() : title(); }
 function pauseM() {
   state = 'pause'; mb = {};
   show(`<h1>일시정지</h1><p>${stageLabel()} ${stageDef().n} · Lv.${lvl} · <span class=gold>${gold} G</span></p>
-  <div class=row><button onclick="resume()">계속하기</button><button onclick="equipPause()">장비</button><button onclick="ks('pause')">키 설정</button></div>`);
+  <div class=row><button onclick="resume()">계속하기</button><button onclick="invMenu()">장비창 (${kl(KB.inv)})</button><button onclick="ks('pause')">키 설정</button></div>`);
 }
-function equipPause() {
-  state = 'pause';
-  show(`<h2>장비</h2>${equipHTML()}<div class=row><button onclick="pauseM()">돌아가기</button></div>`, true);
+
+// ----- 장비창: 게임 중 언제든 (I키) -----
+let invTab = 'equip';
+function invMenu(tab) {
+  state = 'inv'; mb = {};
+  if (tab) invTab = tab;
+  const tabs = [['equip', `장비 (${inv.length})`], ['relic', `유물 (${relics.length})`]]
+    .map(([k, n]) => `<button class="${invTab === k ? 'on' : ''}" onclick="invMenu('${k}')">${n}</button>`).join('');
+  show(`<h2>장비창</h2><p>${stageLabel()} ${stageDef().n} · Lv.${lvl} · HP ${Math.ceil(p.hp)}/${Math.round(T.maxhp)} · <span class=gold>${gold} G</span></p>
+  <div class=tabs>${tabs}</div>${invTab === 'equip' ? equipHTML() : relicHTML()}
+  <div class=row><button class=go onclick="resume()">닫기 (${kl(KB.inv)} / Esc)</button></div>`, true);
 }
 function resume() { hide(); state = 'play'; }
 function start() { hide(); newRun(); state = 'play'; }
@@ -64,7 +72,7 @@ function relicMenu() {
   relicOpts = shuffle(RELICS.filter((r) => !relics.includes(r.id))).slice(0, 3);
   if (!relicOpts.length) return shopMenu('shop', true);
   state = 'relic'; ban = null;
-  show(`<h1>클리어 보상</h1><p>${WORLDS[cur.w].n} 정복! 유물 하나를 선택하세요 (1~3 키) — 장착 없이 영구 적용</p>
+  show(`<h1>클리어 보상</h1><p>${WORLDS[cur.w].n} 정복! 유물 하나를 선택하세요 (1~3 키) — 장착 없이 영구 적용</p>${clearMsg ? `<p class=gold>${clearMsg}</p>` : ''}
   <div class=grid>${relicOpts.map((r, i) => `<div class="card relic" onclick="pickRelic(${i})"><small>유물 ${i + 1}</small><b>${r.n}</b><div class=d>${r.d}</div><button>선택</button></div>`).join('')}</div>`, true);
 }
 function pickRelic(i) {
@@ -76,8 +84,9 @@ function pickRelic(i) {
 
 // ----- 정비 화면 (스테이지 사이) -----
 // 상점 상품은 맵이 바뀔 때마다 새로 바뀜. 🔒 잠근 상품은 사거나 잠금을 풀 때까지 계속 남아 있음.
-const lockCost = (it) => Math.max(10, Math.round(it.price * 0.1));
-const rerollCost = () => REROLL_PRICE + rerollN * 10;
+const priceOf = (it) => Math.round(it.price * (1 - T.disc));
+const lockCost = (it) => Math.max(10, Math.round(priceOf(it) * 0.1));
+const rerollCost = () => (rerollN < T.freeroll ? 0 : REROLL_PRICE + (rerollN - T.freeroll) * 10);
 
 function rollStock() {
   lockd = lockd.filter((id) => !inv.includes(id));
@@ -97,6 +106,7 @@ function shopMenu(tab, fresh) {
   show(`<h2>정비 시간</h2>
   <p>다음: <b>${stageLabel(nc)} ${nd.n}</b>${isBossStage(nc) ? ' · <span class=warn>보스전!</span>' : ''}
    · HP ${Math.ceil(p.hp)}/${Math.round(T.maxhp)} · <span class=gold>${gold} G</span></p>
+  ${clearMsg ? `<p class=gold>클리어 정산: ${clearMsg}</p>` : ''}
   <div class=tabs>${tabs}</div>${body}
   <div class=row><button class=go onclick="nextStage()">다음 스테이지 ▶ (Enter)</button></div>`, true);
 }
@@ -112,15 +122,16 @@ function shopHTML() {
     const lockBtn = locked
       ? `<button class=lock onclick="toggleLock('${id}')" title="잠금 해제 (무료)">🔒 잠김</button>`
       : `<button class=lock ${gold < lockCost(it) ? 'disabled' : ''} onclick="toggleLock('${id}')" title="다음 맵에서도 이 상품 유지">🔓 ${lockCost(it)}G</button>`;
-    return card(it, `<div class=btns><button ${gold < it.price ? 'disabled' : ''} onclick="buy('${id}')">${it.price} G 구매</button>${lockBtn}</div>`, locked ? 'locked' : '');
+    const pr2 = priceOf(it);
+    return card(it, `<div class=btns><button ${gold < pr2 ? 'disabled' : ''} onclick="buy('${id}')">${pr2 < it.price ? `<s>${it.price}</s> ` : ''}${pr2} G 구매</button>${lockBtn}</div>`, locked ? 'locked' : '');
   }).join('');
   const full = p.hp >= T.maxhp;
   const potion = `<div class="card t0"><small>소모품</small><b>회복 물약</b><div class=d>HP를 전부 회복합니다.</div>
     <button ${gold < POTION_PRICE || full ? 'disabled' : ''} onclick="buyPotion()">${full ? 'HP 가득' : POTION_PRICE + ' G 구매'}</button></div>`;
   return `<div class=grid>${items || '<p>더 살 수 있는 장비가 없어요.</p>'}${potion}</div>
-  <div class=row><button ${gold < rerollCost() ? 'disabled' : ''} onclick="reroll()">상품 새로고침 (${rerollCost()} G) — 잠근 상품은 유지</button></div>
+  <div class=row><button ${gold < rerollCost() ? 'disabled' : ''} onclick="reroll()">상품 새로고침 (${rerollCost() ? rerollCost() + ' G' : '무료'}) — 잠근 상품은 유지</button></div>
   <p><small>상품은 맵마다 바뀝니다. 마음에 드는 상품은 🔓 잠금(가격의 10%)하면 다음 맵에서도 남아 있어요.<br>
-  ${tierCap(nextCur()) < 3 ? `★★${tierCap(nextCur()) < 2 ? ' 희귀 장비는 1-3부터,' : ''} ★★★ 전설 장비는 2월드부터 등장해요.` : ''}</small></p>`;
+  ${tierCap(nextCur()) < 2 ? '★★ 희귀 장비는 1-3부터, ' : ''}${tierCap(nextCur()) < 3 ? '★★★ 전설 장비는 2월드부터 등장해요.' : ''}</small></p>`;
 }
 
 const slotsFor = (it) => (it.slot === 'acc' ? ['acc1', 'acc2'] : [it.slot]);
@@ -164,16 +175,20 @@ function statsHTML() {
     [T.psn, '☠ 독', `중첩당 초당 ${pc(T.psn)}`], [T.chain, '⚡ 연쇄 번개', T.chain + '명'], [T.swave, '검기', pc(T.swave)],
     [T.exe, '처형', pc(T.exe) + ' 이하'], [T.kboom, '💥 시체 폭발', pc(T.kboom)], [T.thorns, '반격', pc(T.thorns)],
     [T.revive, '부활', T.revive + '회'],
+    [T.gdup, '골드 추가 획득', '×' + (1 + T.gdup)], [T.intr, '이자', `${pc(T.intr)} (최대 ${Math.round(800 * T.intr)}G)`],
+    [T.vac, '자동 획득', '켜짐'], [T.luck, '★몬스터 확률', '+' + pc(T.luck)], [T.bounty, '★몬스터 보상', '×2'],
+    [T.disc, '상점 할인', pc(T.disc)], [T.freeroll, '무료 새로고침', T.freeroll + '회'], [T.clrxp, '클리어 경험치', pc(T.clrxp)],
+    [T.chest, '보물상자', '항상'], [T.gkill, '처치 골드', '+' + T.gkill],
   ].filter((r) => r[0]).map((r) => [r[1], r[2]]);
   return `<h3>현재 능력치</h3><div class=stats>${[...rows, ...fx2].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>`;
 }
 
-function refreshMenu() { state === 'shop' ? shopMenu() : equipPause(); }
+function refreshMenu() { state === 'shop' ? shopMenu() : invMenu(); }
 
 function buy(id) {
   const it = ITEM[id];
-  if (gold < it.price || inv.includes(id)) return;
-  gold -= it.price;
+  if (gold < priceOf(it) || inv.includes(id)) return;
+  gold -= priceOf(it);
   inv.push(id);
   lockd = lockd.filter((x) => x !== id);
   const empty = slotsFor(it).find((s) => !eq[s]);

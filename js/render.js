@@ -78,7 +78,7 @@ function drawE(e) {
   const P = (c) => (g.fillStyle = f ? '#fff' : c), S2 = (c) => (g.strokeStyle = f ? '#fff' : c);
   // 버프 / 시전 이펙트 (뒤쪽)
   g.save(); g.globalCompositeOperation = 'lighter';
-  if (e.elite) glow(sx, e.y - h * 0.5, h * 0.9, '255,200,60', 0.3 + 0.1 * Math.sin(time * 5));
+  if (e.star) glow(sx, e.y - h * 0.5, h * (0.6 + e.star * 0.12), e.star >= 4 ? '255,90,60' : '255,200,60', 0.2 + e.star * 0.05 + 0.1 * Math.sin(time * 5));
   if (e.bf > 0) glow(sx, e.y - h * 0.4, h * 0.8, '255,150,60', 0.35 + 0.15 * Math.sin(time * 12));
   if (e.cast > 0 && e.D.role) glow(sx, e.y - h * 0.6, 60, hexRgb(e.D.role[1]), e.cast);
   g.restore();
@@ -154,9 +154,11 @@ function drawStatus(e) {
     g.font = '13px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#9aff5a';
     g.fillText('☠' + e.psnS, sx + e.w * 0.6 + 6, e.y - e.h + 4); g.textAlign = 'left';
   }
-  if (e.elite) {
-    g.font = '13px "Do Hyeon",sans-serif'; g.textAlign = 'center';
-    g.fillStyle = '#000'; g.fillText('정예', sx + 1, e.y - e.h - 27); g.fillStyle = '#ffd24a'; g.fillText('정예', sx, e.y - e.h - 28);
+  if (e.star) {
+    const s = '★'.repeat(e.star);
+    g.font = '14px "Do Hyeon",sans-serif'; g.textAlign = 'center';
+    g.fillStyle = '#000'; g.fillText(s, sx + 1, e.y - e.h - 27);
+    g.fillStyle = e.star >= 4 ? '#ff7a4a' : '#ffd24a'; g.fillText(s, sx, e.y - e.h - 28);
     g.textAlign = 'left';
   }
   if (e.shd > 0) {
@@ -371,6 +373,15 @@ function draw() {
   // 드롭
   for (const d of dr) {
     const x = d.x - cam;
+    if (d.k === 'it') {
+      // 장비: 등급 색으로 빛나는 상자
+      const tc = ['255,255,255', '200,230,255', '220,160,255', '255,180,90'][ITEM[d.id].tier];
+      g.save(); g.globalCompositeOperation = 'lighter'; glow(x, d.y, 30, tc, 0.7 + 0.2 * Math.sin(time * 6)); g.restore();
+      g.fillStyle = `rgb(${tc})`; g.fillRect(x - 8, d.y - 8, 16, 16);
+      g.fillStyle = '#1a0f22'; g.fillRect(x - 5, d.y - 5, 10, 10);
+      g.fillStyle = `rgb(${tc})`; g.fillRect(x - 2, d.y - 2, 4, 4);
+      continue;
+    }
     if (d.k === 'g') {
       g.fillStyle = '#8a5a10'; g.beginPath(); g.arc(x, d.y, 6, 0, 7); g.fill();
       g.fillStyle = '#ffd24a'; g.beginPath(); g.ellipse(x, d.y, 5 * Math.abs(Math.cos(time * 5 + d.x)) + 1, 5, 0, 0, 7); g.fill();
@@ -382,6 +393,20 @@ function draw() {
     g.restore();
   }
   drawHazards();
+  for (const c of chests) {
+    const x = c.x - cam, y = c.y;
+    if (!c.open) { g.save(); g.globalCompositeOperation = 'lighter'; glow(x, y - 14, 46, '255,210,80', 0.3 + 0.1 * Math.sin(time * 4)); g.restore(); }
+    g.fillStyle = '#6a3a14'; g.fillRect(x - 20, y - 24, 40, 24);
+    g.fillStyle = '#c9a227'; g.fillRect(x - 20, y - 24, 40, 3); g.fillRect(x - 3, y - 18, 6, 8);
+    if (c.open) { g.fillStyle = '#4a2a0e'; g.fillRect(x - 20, y - 36, 40, 10); }
+    else {
+      g.fillStyle = '#8a4a1a'; g.fillRect(x - 21, y - 32, 42, 9);
+      if (Math.abs(p.x - c.x) < 60 && Math.abs(p.y - c.y) < 60) {
+        g.font = '15px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd24a';
+        g.fillText(`${kl(KB.por)} 열기`, x, y - 44); g.textAlign = 'left';
+      }
+    }
+  }
   for (const e of en) drawE(e);
   for (const a of al) drawA(a);
   drawP();
@@ -456,6 +481,8 @@ function hud() {
   bar(16, 80, 60, 6, 1 - Math.max(0, p.cd) / (MAG_CD * T.cdr), '#c88aff'); g.fillStyle = '#fff'; g.fillText('우클릭 마법', 82, 88);
   bar(16, 98, 60, 6, 1 - Math.max(0, p.sc) / (SCD * T.scd), '#6aff9a'); g.fillStyle = '#fff';
   g.fillText(`${kl(KB.sum)} 소환 ${p.sc > 0 ? Math.ceil(p.sc) + '초' : '준비'}  (${al.length}/${MAXA})`, 82, 106);
+  g.font = '13px "Do Hyeon",sans-serif'; g.fillStyle = '#ffffff99'; g.fillText(`${kl(KB.inv)} 장비창 · Esc 일시정지`, 16, H - 12);
+  g.font = '16px "Do Hyeon",sans-serif'; g.fillStyle = '#fff';
   let bx = 16;
   for (const k in p.b) { g.fillStyle = BF[k][1]; g.fillRect(bx, 116, 18, 18); g.fillStyle = '#fff'; g.fillText(Math.ceil(p.b[k]), bx + 22, 130); bx += 56; }
   // 골드 / 유물

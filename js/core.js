@@ -17,6 +17,7 @@ let time = 0, shake = 0, ban = null, spt = 0, bossT = 0, winT = 0;
 let S, T, p, lvl, xp, need, upc, opts;  // S: 레벨업 스탯, T: 장비·유물까지 합친 최종 스탯
 let gold, inv, eq, relics, stock, relicOpts, lockd = [], rerollN = 0;
 let cur = { w: 0, s: 0 }, kills = 0, portal = null, boss = null, bdone = 0, cam = 0, camY = 0, pl = [], map = null;
+let chests = [], clearMsg = '';
 // en 적, pr 마법구체, eb 적 탄, dr 드롭, fx 스프라이트 이펙트, tx 숫자, al 소환수,
 // pt/rg 레벨업 이펙트, hz 바닥 위험지대, wv 퍼지는 원 이펙트
 // kq 처치 폭발 대기열, zp 번개 이펙트
@@ -49,7 +50,8 @@ function activeMods() {
 
 function recalc() {
   T = { ...S, gold: 1, crit: 0, critx: 0, vamp: 0, dr: 0, thorns: 0, revive: 0,
-        frz: 0, frzT: 0, frzB: 0, sfrz: 0, frzA: 0, burn: 0, psn: 0, chain: 0, swave: 0, exe: 0, kboom: 0 };
+        frz: 0, frzT: 0, frzB: 0, sfrz: 0, frzA: 0, burn: 0, psn: 0, chain: 0, swave: 0, exe: 0, kboom: 0,
+        gdup: 0, intr: 0, vac: 0, luck: 0, bounty: 0, disc: 0, freeroll: 0, clrxp: 0, chest: 0, gkill: 0 };
   const add = {};
   for (const m of activeMods()) for (const k in m) add[k] = (add[k] || 0) + m[k];
   for (const k in add) {
@@ -92,6 +94,12 @@ function go() {
   cam = cl(p.x - W / 2, 0, WW - W);
   camY = cl(p.y - H * 0.62, 0, MH - H);
   ban = { s: `${stageLabel()} · ${stageDef().n}${map.name ? ` (${map.name})` : ''}`, t: 2.5 };
+  // 보물상자: 시작 지점에서 먼 곳에
+  chests = [];
+  if (!isBossStage() && (T.chest || R() < CHEST_CHANCE)) {
+    const sp = spawnSpot(900, 99999) || spawnSpot(500, 99999);
+    if (sp) chests.push({ x: sp.x, y: sp.y, open: 0 });
+  }
   // 발판 위에도 미리 적 배치
   if (!isBossStage()) {
     const n = Math.min(8, Math.round(stageDef().q * 0.35));
@@ -113,8 +121,26 @@ function enter() {
   if (!portal || Math.abs(p.x - portal.x) >= 60 || Math.abs(p.y - portal.y) > 80) return;
   p.hp = Math.min(T.maxhp, p.hp + T.maxhp * 0.3);
   mb = {};
+  stageClear();
   if (isBossStage()) relicMenu();
   else shopMenu('shop', true);
+}
+
+// 스테이지 클리어 정산: 자동 획득, 이자, 경험치
+function stageClear() {
+  const msg = [];
+  if (T.vac && dr.length) {
+    let g0 = gold, x0 = xp, n = 0;
+    for (const d of dr) if (d.k !== 'b') { pickRaw(d); n++; }
+    dr = [];
+    if (n) msg.push(`자동 획득 +${gold - g0}G${xp > x0 ? ' · 경험치 ' + Math.round(xp - x0) : ''}`);
+  }
+  if (T.intr && gold > 0) {
+    const v = Math.min(Math.round(gold * T.intr), Math.round(800 * T.intr));
+    if (v > 0) { gold += v; msg.push(`이자 +${v}G`); }
+  }
+  if (T.clrxp) { xp += need * T.clrxp; msg.push(`레벨업 게이지 +${Math.round(T.clrxp * 100)}%`); }
+  clearMsg = msg.join(' · ');
 }
 
 function nextStage() {
@@ -122,4 +148,6 @@ function nextStage() {
   go();
   hide();
   state = 'play';
+  clearMsg = '';
+  chk(); // 정산으로 쌓인 경험치 반영
 }
