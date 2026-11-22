@@ -1,6 +1,7 @@
 // =====================================================================
 //  화면 메뉴 — 타이틀, 키 설정, 일시정지, 레벨업, 유물, 정비(상점·장비·유물), 결과
 // =====================================================================
+let shopNote = '';
 let KB = { ...KD }, wait = null, back = 'title', shopTab = 'shop';
 try { Object.assign(KB, JSON.parse(localStorage.getItem('maou_kb2') || '{}')); } catch (x) {}
 
@@ -40,7 +41,7 @@ let invTab = 'equip';
 function invMenu(tab) {
   state = 'inv'; mb = {};
   if (tab) invTab = tab;
-  const tabs = [['equip', `장비 (${inv.length})`], ['relic', `유물 (${relics.length})`]]
+  const tabs = [['equip', `장비 (${inv.length})`], ['relic', `유물·보석 (${relics.length}·${gems.length}/${GEMS.length})`]]
     .map(([k, n]) => `<button class="${invTab === k ? 'on' : ''}" onclick="invMenu('${k}')">${n}</button>`).join('');
   show(`<h2>장비창</h2><p>${stageLabel()} ${stageDef().n} · Lv.${lvl} · HP ${Math.ceil(p.hp)}/${Math.round(T.maxhp)} · <span class=gold>${gold} G</span></p>
   <div class=tabs>${tabs}</div>${invTab === 'equip' ? equipHTML() : relicHTML()}
@@ -111,16 +112,16 @@ function rollStock() {
 
 function shopMenu(tab, fresh) {
   state = 'shop'; mb = {}; ban = null;
-  if (fresh) { rollStock(); rerollN = 0; }
+  if (fresh) { rollStock(); rerollN = 0; shopNote = ''; }
   if (tab) shopTab = tab;
   const nc = nextCur(), nd = stageDef(nc);
-  const tabs = [['shop', '상점'], ['equip', '장비'], ['relic', '유물']]
+  const tabs = [['shop', '상점'], ['equip', '장비'], ['relic', `유물·보석 (${gems.length}/${GEMS.length})`]]
     .map(([k, n]) => `<button class="${shopTab === k ? 'on' : ''}" onclick="shopMenu('${k}')">${n}</button>`).join('');
   const body = shopTab === 'shop' ? shopHTML() : shopTab === 'equip' ? equipHTML() : relicHTML();
   show(`<h2>정비 시간</h2>
   <p>다음: <b>${stageLabel(nc)} ${nd.n}</b>${isBossStage(nc) ? ' · <span class=warn>보스전!</span>' : ''}
    · HP ${Math.ceil(p.hp)}/${Math.round(T.maxhp)} · <span class=gold>${gold} G</span></p>
-  ${clearMsg ? `<p class=gold>클리어 정산: ${clearMsg}</p>` : ''}
+  ${clearMsg ? `<p class=gold>클리어 정산: ${clearMsg}</p>` : ''}${shopNote ? `<p class=grow>${shopNote}</p>` : ''}
   <div class=tabs>${tabs}</div>${body}
   <div class=row><button class=go onclick="nextStage()">다음 스테이지 ▶ (Enter)</button></div>`, true);
 }
@@ -128,11 +129,11 @@ function shopMenu(tab, fresh) {
 const card = (it, btn, cls = '') => {
   const L = upg[it.id] || 0;
   return `<div class="card t${it.tier} ${cls}"><small>${SLOT[it.slot]} · <span class=tier>${'★'.repeat(it.tier)} ${TIER_NAME[it.tier]}</span></small>` +
-    `<div class=ch>${icImg(itemIcon(it), 'icn')}<b>${it.n}${L ? ` <span class=upg>+${L}</span>` : ''}</b></div><div class=d>${it.d}${L ? `<br><span class=upg>강화 효과 ×${(1 + UPG_STEP * L).toFixed(2)}${L >= 3 ? ' · 개수형 +' + Math.floor(L / 3) : ''}</span>` : ''}</div>${btn}</div>`;
+    `<div class=ch>${icImg(itemIcon(it), 'icn')}<b>${baseName(it)}${L ? ` <span class=upg>+${L}</span>` : ''}</b></div><div class=d>${it.d}${L ? `<br><span class=upg>강화 효과 ×${(1 + UPG_STEP * L).toFixed(2)}${L >= 3 ? ' · 개수형 +' + Math.floor(L / 3) : ''}</span>` : ''}${it.sd ? `<br><span class=grow>${it.sd(stk[it.id])}</span>` : ''}</div>${btn}</div>`;
 };
 // 강화 비용 / 장신구 칸 확장 비용
 const upgCost = (id) => Math.round(ITEM[id].price * UPG_COST * ((upg[id] || 0) + 1) * (1 - T.disc));
-const slotCost = () => ACC_SLOT_PRICE[accN - ACC_BASE];
+const slotCost = () => ACC_SLOT_PRICE[accN - ACC_BASE - (gemAll() ? 1 : 0)];
 
 function shopHTML() {
   const items = stock.map((id) => {
@@ -158,7 +159,8 @@ function shopHTML() {
   ${tierCap(nextCur()) < 2 ? '★★ 희귀 장비는 1-3부터, ' : ''}${tierCap(nextCur()) < 3 ? '★★★ 전설 장비는 2월드부터 등장해요.' : ''}</small></p>`;
 }
 
-const slotsFor = (it) => (it.slot === 'acc' ? Array.from({ length: accN }, (_, i) => 'acc' + (i + 1)) : [it.slot]);
+const slotsFor = (it) => (it.slot === 'acc' ? Array.from({ length: accN }, (_, i) => 'acc' + (i + 1))
+  : gemAll() ? [it.slot, it.slot + '2'] : [it.slot]);
 
 // 상점(정비 화면)에서만 강화 버튼 표시
 function upgBtn(id) {
@@ -183,13 +185,20 @@ function equipHTML() {
       : `<button onclick="equip('${id}')">장착</button>`;
     return card(it, `<div class=btns>${btn}${upgBtn(id)}</div>`);
   }).join('');
-  return `<h3>장착 중 (장신구 ${accN}칸${state === 'shop' && slotCost() ? ' · 상점에서 칸 확장 가능' : ''})</h3><div class=grid>${slots}</div>
+  return `<h3>장착 중 (${gemAll() ? '무기 2 · 갑옷 2 · ' : ''}장신구 ${accN}칸${state === 'shop' && slotCost() ? ' · 상점에서 칸 확장 가능' : ''})</h3><div class=grid>${slots}</div>
   <h3>가방</h3><div class=grid>${bag || '<p>가방이 비어 있어요. 상점에서 장비를 사세요.</p>'}</div>${statsHTML()}`;
 }
 
+function gemHTML() {
+  const cards = GEMS.map((x) => gems.includes(x.id)
+    ? `<div class="card gem" style="border-color:${x.c}"><small>보석</small><div class=ch>${icImg('gem_' + x.id, 'icn')}<b style="color:${x.c}">${x.n}</b></div><div class=d>${x.d}</div></div>`
+    : `<div class="card empty"><small>보석</small><b>— ??? —</b><div class=d>보스(확정) · ★4·★5 몬스터 · 보물상자에서 얻을 수 있어요</div></div>`).join('');
+  return `<h3>보석 ${gems.length}/${GEMS.length} ${gemAll() ? '<span class=gold>— 세트 완성: 무기·갑옷·장신구 칸 +1</span>' : '<small>(모두 모으면 무기·갑옷·장신구 칸 +1)</small>'}</h3><div class=grid>${cards}</div>`;
+}
+
 function relicHTML() {
-  if (!relics.length) return '<p>아직 유물이 없어요. 보스를 쓰러뜨리면 하나를 골라 얻을 수 있어요.</p>';
-  return `<div class=grid>${relics.map((id) => `<div class="card relic"><small>유물</small><div class=ch>${icImg(relicIcon(RELIC[id]), 'icn')}<b>${RELIC[id].n}</b></div><div class=d>${RELIC[id].d}</div></div>`).join('')}</div>`;
+  if (!relics.length) return '<p>아직 유물이 없어요. 보스를 쓰러뜨리면 하나를 골라 얻을 수 있어요.</p>' + gemHTML();
+  return `<div class=grid>${relics.map((id) => `<div class="card relic"><small>유물</small><div class=ch>${icImg(relicIcon(RELIC[id]), 'icn')}<b>${RELIC[id].n}</b></div><div class=d>${RELIC[id].d}</div></div>`).join('')}</div>${gemHTML()}`;
 }
 
 function statsHTML() {
@@ -214,9 +223,22 @@ function statsHTML() {
     [T.disc, '상점 할인', pc(T.disc)], [T.freeroll, '무료 새로고침', T.freeroll + '회'], [T.clrxp, '클리어 경험치', pc(T.clrxp)],
     [T.chest, '보물상자', '항상'], [T.gkill, '처치 골드', '+' + T.gkill],
     [T.combo, '3연타 콤보', '켜짐'], [T.slam, '내려찍기', '공중 S+공격'], [T.dash, '돌진 베기', '켜짐'],
+    [T.gfist, '최대 HP 비례 피해', pc(T.gfist)], [T.flesh, '살덩이 (HP 100당)', '-' + pc(T.flesh)],
+    [T.lowx, '빈사 적 추가 피해', '+' + pc(T.lowx)], [T.healm, '회복량', '+' + pc(T.healm)], [T.frust, '피격 반격 폭발', pc(T.frust)],
     [T.swkill, '검 처치 보상', '+' + pc(T.swkill)], [T.swdrop, '검 처치 장비 드롭', '+' + pc(T.swdrop)],
   ].filter((r) => r[0]).map((r) => [r[1], r[2]]);
   return `<h3>현재 능력치</h3><div class=stats>${[...rows, ...fx2].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>`;
+}
+
+// 골드 사용 (황금 우상: 50G마다 무작위 능력치 +2%)
+function spend(v) {
+  gold -= v;
+  if (!worn('idol') || v <= 0) return;
+  const o = (stk.idol = stk.idol || { g: 0, m: {} });
+  o.g += v;
+  const got = [];
+  while (o.g >= 50) { o.g -= 50; got.push(growStat('idol', 0.02)); }
+  if (got.length) { recalc(); shopNote = `황금 우상: ${got.join(', ')}`; }
 }
 
 function refreshMenu() { state === 'shop' ? shopMenu() : invMenu(); }
@@ -224,7 +246,7 @@ function refreshMenu() { state === 'shop' ? shopMenu() : invMenu(); }
 function buy(id) {
   const it = ITEM[id];
   if (gold < priceOf(it) || inv.includes(id)) return;
-  gold -= priceOf(it);
+  spend(priceOf(it));
   inv.push(id);
   lockd = lockd.filter((x) => x !== id);
   const empty = slotsFor(it).find((s) => !eq[s]);
@@ -235,7 +257,7 @@ function buy(id) {
 function enhance(id) {
   const c = upgCost(id);
   if (gold < c || (upg[id] || 0) >= UPG_MAX) return;
-  gold -= c;
+  spend(c);
   upg[id] = (upg[id] || 0) + 1;
   recalc();
   shopMenu();
@@ -243,7 +265,7 @@ function enhance(id) {
 function buySlot() {
   const c = slotCost();
   if (!c || gold < c) return;
-  gold -= c;
+  spend(c);
   accN++;
   eq['acc' + accN] = null;
   shopMenu();
@@ -253,20 +275,20 @@ function toggleLock(id) {
   else {
     const c = lockCost(ITEM[id]);
     if (gold < c) return;
-    gold -= c;
+    spend(c);
     lockd.push(id);
   }
   shopMenu();
 }
 function buyPotion() {
   if (gold < POTION_PRICE || p.hp >= T.maxhp) return;
-  gold -= POTION_PRICE;
+  spend(POTION_PRICE);
   p.hp = T.maxhp;
   shopMenu();
 }
 function reroll() {
   if (gold < rerollCost()) return;
-  gold -= rerollCost();
+  spend(rerollCost());
   rerollN++;
   rollStock();
   shopMenu();

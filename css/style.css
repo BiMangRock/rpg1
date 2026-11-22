@@ -53,3 +53,6 @@ img.ic{height:1.2em;width:1.2em;vertical-align:-.25em;margin:0 1px;image-renderi
 .ch{display:flex;align-items:center;gap:8px}
 img.icn{width:48px;height:48px;flex:0 0 48px;filter:drop-shadow(0 2px 2px #000a)}
 .card.relic img.icn{width:56px;height:56px;flex-basis:56px}
+
+.card .grow,p.grow{color:#ff9ac0}
+.card.gem{background:#10141f}

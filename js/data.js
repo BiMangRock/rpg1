@@ -164,6 +164,10 @@ const UPGRADES = [
 //    luck: ★몬스터 등장 확률 증가, 장비 드롭 확률 증가 / bounty: ★몬스터 보상 2배
 //    disc: 상점 가격 할인 / freeroll: 상점마다 무료 새로고침 횟수 / clrxp: 클리어 시 레벨업 게이지 획득
 //    chest: 보물상자 항상 등장 + 보상 증가 / gkill: 적 처치 시 골드 추가
+//  성장형 (combat.js onKill 등에서 stk[아이템 id]에 누적, dyn(누적값)이 추가 효과를 돌려줌):
+//    atkf: 공격력 고정 증가 / gfist: 검·마법 적중 시 최대 HP × 값 추가 피해
+//    flesh: 최대 HP 100마다 받는 피해 감소 (최대 40%) / lowx: 체력 30% 이하 적에게 피해 증가
+//    healm: 회복량 증가 / frust: 피격 시 받은 피해 × 값으로 주변 적 폭발 반격
 const SLOT = { wpn: '무기', arm: '갑옷', acc: '장신구' };              // 아이템 종류
 const TIER_NAME = ['', '일반', '희귀', '전설'];
 
@@ -225,6 +229,31 @@ const ITEMS = [
   // --- 전투 장신구 (전설) ---
   { id: 'pact',    slot: 'acc', tier: 3, price: 320, n: '피의 계약',      d: '공격력 +40%, 치명타 +20%, 치명타 피해 3배', m: { atk: 0.4, crit: 0.2, critx: 1 } },
   { id: 'chaos',   slot: 'acc', tier: 3, price: 340, n: '혼돈의 눈',      d: '❄빙결 +15%, 🔥화상, ☠독, ⚡연쇄 번개 2명 — 모든 원소를 부여', m: { frz: 0.15, burn: 0.5, psn: 0.25, chain: 2 } },
+  // --- 성장형 (적을 잡거나 맞을수록 영구히 강해짐. 누적치는 장비에 남음 → 착용 중일 때만 쌓임) ---
+  { id: 'bloodsw', slot: 'wpn', tier: 3, price: 340, n: '피에 젖은 칼날', d: '공격력 +15%, 적을 처치할 때마다 공격력 +0.2 (영구)', m: { atk: 0.15 },
+    dyn: (s) => ({ atkf: (s || 0) * 0.2 }), sd: (s) => `누적: 공격력 +${((s || 0) * 0.2).toFixed(1)}` },
+  { id: 'gfist',   slot: 'wpn', tier: 3, price: 360, n: '거인의 주먹',    d: '공격력 +20%, 검·마법 적중 시 최대 HP의 2%만큼 추가 피해', m: { atk: 0.2, gfist: 0.02 } },
+  { id: 'scars',   slot: 'arm', tier: 2, price: 190, n: '광전사의 흉터',  d: '최대 HP +40, 피격될 때마다 받는 피해 -0.5% (영구, 최대 -30%)', m: { maxhp: 40 },
+    dyn: (s) => ({ dr: (s || 0) * 0.005 }), sd: (s) => `누적: 받는 피해 -${((s || 0) * 0.5).toFixed(1)}%${s >= 60 ? ' (MAX)' : ''}` },
+  { id: 'flesh',   slot: 'arm', tier: 3, price: 340, n: '살덩이 갑옷',    d: '최대 HP +80, 최대 HP 100마다 받는 피해 -4% (최대 -40%)', m: { maxhp: 80, flesh: 0.04 } },
+  { id: 'predheart', slot: 'acc', tier: 3, price: 360, n: '포식자의 심장', d: '적을 처치할 때마다 최대 HP +1 (영구, 현재 HP는 그대로)', m: {},
+    dyn: (s) => ({ maxhp: s || 0 }), sd: (s) => `누적: 최대 HP +${s || 0}` },
+  { id: 'pride',   slot: 'acc', tier: 3, price: 300, n: '오만의 왕관',    d: 'HP가 가득 찬 상태에서 적을 처치하면 최대 HP +2 (영구)', m: {},
+    dyn: (s) => ({ maxhp: s || 0 }), sd: (s) => `누적: 최대 HP +${s || 0}` },
+  { id: 'vgrail',  slot: 'acc', tier: 3, price: 300, n: '흡혈귀의 성배',  d: '처치 시 HP +2, 최대 HP를 넘친 회복량의 10%가 최대 HP로 바뀜 (영구)', m: { ls: 2 },
+    dyn: (s) => ({ maxhp: s || 0 }), sd: (s) => `누적: 최대 HP +${Math.floor(s || 0)}` },
+  { id: 'reaper',  slot: 'acc', tier: 3, price: 320, n: '사신의 장부',    d: '적 100마리 처치마다 마법구체 +1 (최대 +5)', m: {},
+    dyn: (s) => ({ multi: Math.min(5, Math.floor((s || 0) / 100)) }), sd: (s) => (s || 0) >= 500 ? '마법구체 +5 (MAX)' : `처치 ${(s || 0) % 100}/100 · 마법구체 +${Math.floor((s || 0) / 100)}` },
+  { id: 'trophy',  slot: 'acc', tier: 2, price: 200, n: '사냥꾼의 트로피', d: '★몬스터·보스를 처치하면 무작위 능력치 하나가 영구 +5%', m: {},
+    dyn: (s) => ({ ...s }), sd: (s) => statList(s) },
+  { id: 'slaughter', slot: 'acc', tier: 2, price: 180, n: '연쇄 학살',   d: '피격 없이 처치할 때마다 공격 속도 +2% (최대 +100%), 맞으면 스택 절반 소실', m: {},
+    dyn: (s) => ({ as: (s || 0) * 0.02 }), sd: (s) => `스택 ${s || 0}/50 · 공격 속도 +${(s || 0) * 2}%` },
+  { id: 'souljar', slot: 'acc', tier: 2, price: 170, n: '영혼 항아리',    d: '마법 위력 +10%, 처치 시 영혼 +1. 영혼 500개 → 각성: 공격력 +40%, 마법 위력 +40%, 처치 시 HP +4, ⚡연쇄 번개 2명', m: { mp: 0.1 },
+    dyn: (s) => ((s || 0) >= SOUL_MAX ? { atk: 0.4, mp: 0.4, ls: 4, chain: 2 } : {}), sd: (s) => (s || 0) >= SOUL_MAX ? '✦ 각성 완료' : `영혼 ${s || 0}/${SOUL_MAX}` },
+  { id: 'codex',   slot: 'acc', tier: 2, price: 160, n: '마왕의 도감',    d: '같은 종족을 처치할수록 그 종족에게 피해 증가 (1마리당 +1%, 최대 +50%). 50마리 채운 종족마다 공격력 +3%', m: {},
+    dyn: (s) => ({ atk: codexDone(s) * 0.03 }), sd: (s) => `도감 완성 ${codexDone(s)}/${CODEX_TYPES.length}종` },
+  { id: 'idol',    slot: 'acc', tier: 2, price: 150, n: '황금 우상',      d: '정비 화면에서 골드를 50G 쓸 때마다 무작위 능력치 하나가 영구 +2%', m: {},
+    dyn: (s) => ({ ...(s?.m || {}) }), sd: (s) => `다음까지 ${50 - Math.floor(s?.g || 0)}G · ${statList(s?.m)}` },
 ];
 
 // 보스를 쓰러뜨리면 3개 중 1개 선택. 장착 없이 영구 적용.
@@ -249,6 +278,32 @@ const RELICS = [
   { id: 'star',   n: '떨어진 별',       d: '★몬스터 등장 확률 +100%, 장비 드롭 +80%, 보상 2배', m: { luck: 1, bounty: 1 } },
   { id: 'vacuum', n: '공허의 아가리',   d: '맵 이동 시 자동 획득 2배, 포털이 열리면 드롭 흡수, 클리어 시 레벨업 게이지 30%', m: { vac: 1, clrxp: 0.3 } },
 ];
+
+// ----- 성장형 장비 보조 데이터 -----
+const SOUL_MAX = 500;
+const CODEX_MAX = 50; // 종족당 도감 완성 처치 수
+const ENEMY_NAME = { farmer: '농부', villager: '마을 주민', swordsman: '검사', archer: '궁수', paladin: '성기사', cleric: '성직자',
+  bard: '군악 사제', ninja: '닌자', zealot: '광신도', summoner: '소환술사', warden: '수호 사제' };
+const CODEX_TYPES = ['farmer', 'villager', 'swordsman', 'archer', 'paladin', 'cleric', 'bard', 'ninja', 'zealot', 'summoner', 'warden'];
+const codexDone = (s) => CODEX_TYPES.filter((t) => (s?.[t] || 0) >= CODEX_MAX).length;
+// 트로피·우상이 올려 주는 무작위 능력치 (모두 % 증가)
+const GROW_STATS = { atk: '공격력', as: '공격 속도', spd: '이동 속도', mp: '마법 위력', area: '폭발 범위', sm: '소환수 강화' };
+const statList = (m) => {
+  const ks = Object.keys(m || {});
+  return ks.length ? '누적: ' + ks.map((k) => `${GROW_STATS[k]} +${Math.round(m[k] * 100)}%`).join(', ') : '누적 없음';
+};
+
+// ----- 보석: 장착 없이 영구 적용. 4개를 모두 모으면 무기·갑옷·장신구 칸이 하나씩 늘어남 -----
+// 얻는 곳: 보스 처치(확정), ★4 몬스터 8%, ★5 몬스터 25%, 보물상자 6%
+const GEMS = [
+  { id: 'despair', n: '절망의 보석', c: '#5a6aff', d: '공격력 +10%, 체력 30% 이하인 적에게 주는 피해 +60%', m: { atk: 0.1, lowx: 0.6 } },
+  { id: 'hope',    n: '희망의 보석', c: '#ffe27a', d: '최대 HP +50, 모든 회복량 +50%', m: { maxhp: 50, healm: 0.5 } },
+  { id: 'hatred',  n: '증오의 보석', c: '#ff3a4a', d: '공격력 +20%, 치명타 확률 +10%, 치명타 피해 +50%', m: { atk: 0.2, crit: 0.1, critx: 0.5 } },
+  { id: 'frust',   n: '좌절의 보석', c: '#7affc0', d: '받는 피해 -10%, 맞으면 받은 피해의 300%로 주변 적에게 폭발 반격', m: { dr: 0.1, frust: 3 } },
+];
+const GEM = Object.fromEntries(GEMS.map((x) => [x.id, x]));
+const GEM_DROP = [0, 0, 0, 0, 0.08, 0.25]; // ★ 수별 보석 드롭 확률
+const GEM_CHEST = 0.06;
 
 const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 const RELIC = Object.fromEntries(RELICS.map((r) => [r.id, r]));
