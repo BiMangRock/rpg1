@@ -536,7 +536,7 @@ function pickRaw(d) {
     lockd = lockd.filter((x) => x !== d.id);
     const it = ITEM[d.id], empty = slotsFor(it).find((s) => !eq[s]);
     if (empty) { eq[empty] = d.id; recalc(); }
-    txt(p.x, p.y - 130, `장비 획득! ${itemName(d.id)}${empty ? ' (장착)' : ''}`, ['#fff', '#cfe6ff', '#e0b0ff', '#ffc070'][it.tier]);
+    txt(p.x, p.y - 130, `${empty ? '장비 장착!' : '장비 획득!'} ${itemName(d.id)}`, ['#fff', '#cfe6ff', '#e0b0ff', '#ffc070'][it.tier]);
   }
 }
 

@@ -725,7 +725,7 @@ function hud() {
     bar(W / 2 - 220, 16, 440, 14, boss.hp / boss.mh, '#a020c0');
     if (boss.shd > 0) { g.fillStyle = '#8ac8ff'; g.fillRect(W / 2 - 220, 31, 440 * cl(boss.shd / boss.mh, 0, 1), 3); }
     g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = '16px "Do Hyeon",sans-serif';
-    g.fillText(`${BOSS[boss.kind].n} · ${boss.pz}페이즈${boss.sanct ? ' · 성역(무적)' : ''}`, W / 2, 50);
+    g.fillText(`${BOSS[boss.kind].n} · ${boss.pz}페이즈${boss.sanct ? ' · 성역: 무적' : ''}`, W / 2, 50);
     g.textAlign = 'left';
   }
   if (portal) {

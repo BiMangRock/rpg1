@@ -61,3 +61,4 @@ img.icn{width:48px;height:48px;flex:0 0 48px;filter:drop-shadow(0 2px 2px #000a)
 .row.col{flex-direction:column;align-items:center}.row.col button{min-width:min(60vw,280px)}
 p.soul{color:#8ae0ff;font-size:clamp(15px,2.2vw,22px);opacity:1}p.soul b{color:#c8f2ff;font-weight:normal}
 .card.meta b{color:#8ae0ff}
+.card.help{width:clamp(180px,27vw,280px)}.card.help b{color:var(--gd)}

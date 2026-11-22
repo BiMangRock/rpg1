@@ -72,7 +72,7 @@ function modsOf(id) {
   }
   return m;
 }
-const baseName = (it) => it.n + (it.id === 'souljar' && (stk.souljar || 0) >= SOUL_MAX ? ' (각성)' : '');
+const baseName = (it) => (it.id === 'souljar' && (stk.souljar || 0) >= SOUL_MAX ? '각성한 ' : '') + it.n;
 const itemName = (id) => baseName(ITEM[id]) + (upg[id] ? ` +${upg[id]}` : '');
 const worn = (id) => { for (const s in eq) if (eq[s] === id) return true; return false; };
 const gemAll = () => gems.length >= GEMS.length; // 보석 4개 → 무기·갑옷·장신구 칸 +1
@@ -153,7 +153,7 @@ function go() {
   for (const a of al) a.y = a.air ? p.y - 80 : GY;
   cam = cl(p.x - W / 2, 0, WW - W);
   camY = cl(p.y - H * 0.62, 0, MH - H);
-  ban = { s: `${stageLabel()} · ${stageDef().n}${map.name ? ` (${map.name})` : ''}`, t: 2.5 };
+  ban = { s: `${stageLabel()} · ${stageDef().n}${map.name ? ` · ${map.name}` : ''}`, t: 2.5 };
   // 보물상자: 시작 지점에서 먼 곳에
   chests = [];
   if (!isBossStage() && (T.chest || R() < CHEST_CHANCE)) {
@@ -198,7 +198,7 @@ function stageClear() {
     if (T.vac && (d.k === 'g' || d.k === 'xp')) pickRaw(d);
   }
   dr = [];
-  if (n) msg.push(`남은 드롭 자동 획득 +${gold - g0}G · 경험치 +${Math.round(xp - x0)}${T.vac ? ' (자루 ×2)' : ''}`);
+  if (n) msg.push(`남은 드롭 자동 획득 +${gold - g0}G · 경험치 +${Math.round(xp - x0)}${T.vac ? ' · 수집가의 자루 2배' : ''}`);
   if (T.intr && gold > 0) {
     const v = Math.min(Math.round(gold * T.intr), Math.round(800 * T.intr));
     if (v > 0) { gold += v; msg.push(`이자 +${v}G`); }

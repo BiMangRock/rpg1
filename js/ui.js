@@ -15,7 +15,7 @@ function title() {
   show(`<h1>마왕 연대기</h1>
   <p>용사 일행을 처단하고 세상을 지배하라.</p>
   <p class=soul>💠 영혼석 <b>${meta.soul}</b></p>
-  <div class="row col"><button class=go onclick="start()">모험 시작</button><button onclick="altar()">영혼의 제단 (영구 강화)</button><button onclick="ks('title')">키 설정</button></div>
+  <div class="row col"><button class=go onclick="start()">모험 시작</button><button onclick="altar()">영혼의 제단</button><button onclick="helpMenu()">도움말</button><button onclick="ks('title')">키 설정</button></div>
   <p><small>${kl(KB.L)} ${kl(KB.R)} 이동 · ${kl(KB.jmp)} 점프 (${kl(KB.dn)}+점프: 아래로) · ${kl(KB.por)} 포털·보물상자 · ${kl(KB.sum)} 소환 · ${kl(KB.inv)} 장비창<br>
   좌클릭 검 (커서 쪽으로 베기) · 우클릭 마법 (커서 방향) · 꾹 누르면 연속 공격 · 적에게 커서를 올리면 정보 표시<br>
   키보드로도 가능: ${kl(KB.atk)} 검 · ${kl(KB.mag)} 마법 · Esc 일시정지</small></p>`);
@@ -68,10 +68,10 @@ let invTab = 'equip';
 function invMenu(tab) {
   state = 'inv'; mb = {};
   if (tab) invTab = tab;
-  const tabs = [['equip', `장비 (${inv.length})`], ['relic', `유물·보석 (${relics.length}·${gems.length}/${GEMS.length})`]]
+  const tabs = [['equip', `장비 (${inv.length})`], ['relic', `유물·보석 (${relics.length}·${gems.length}/${GEMS.length})`], ['help', '도움말']]
     .map(([k, n]) => `<button class="${invTab === k ? 'on' : ''}" onclick="invMenu('${k}')">${n}</button>`).join('');
   show(`<h2>장비창</h2><p>${stageLabel()} ${stageDef().n} · Lv.${lvl} · HP ${Math.ceil(p.hp)}/${Math.round(T.maxhp)} · <span class=gold>${gold} G</span></p>
-  <div class=tabs>${tabs}</div>${invTab === 'equip' ? equipHTML() : relicHTML()}
+  <div class=tabs>${tabs}</div>${invTab === 'equip' ? equipHTML() : invTab === 'help' ? helpHTML() : relicHTML()}
   <div class=row><button class=go onclick="resume()">닫기 (${kl(KB.inv)} / Esc)</button></div>`, true);
 }
 function resume() { hide(); state = 'play'; }
@@ -142,9 +142,9 @@ function shopMenu(tab, fresh) {
   if (fresh) { rollStock(); rerollN = 0; shopNote = ''; }
   if (tab) shopTab = tab;
   const nc = nextCur(), nd = stageDef(nc);
-  const tabs = [['shop', '상점'], ['equip', '장비'], ['relic', `유물·보석 (${gems.length}/${GEMS.length})`]]
+  const tabs = [['shop', '상점'], ['equip', '장비'], ['relic', `유물·보석 (${gems.length}/${GEMS.length})`], ['help', '도움말']]
     .map(([k, n]) => `<button class="${shopTab === k ? 'on' : ''}" onclick="shopMenu('${k}')">${n}</button>`).join('');
-  const body = shopTab === 'shop' ? shopHTML() : shopTab === 'equip' ? equipHTML() : relicHTML();
+  const body = shopTab === 'shop' ? shopHTML() : shopTab === 'equip' ? equipHTML() : shopTab === 'help' ? helpHTML() : relicHTML();
   show(`<h2>정비 시간</h2>
   <p>다음: <b>${stageLabel(nc)} ${nd.n}</b>${isBossStage(nc) ? ' · <span class=warn>보스전!</span>' : ''}
    · HP ${Math.ceil(p.hp)}/${Math.round(T.maxhp)} · <span class=gold>${gold} G</span></p>
@@ -168,7 +168,7 @@ function shopHTML() {
     if (inv.includes(id)) return card(it, '<button disabled>구매 완료</button>', 'sold');
     const locked = lockd.includes(id);
     const lockBtn = locked
-      ? `<button class=lock onclick="toggleLock('${id}')" title="잠금 해제 (무료)">🔒 잠김</button>`
+      ? `<button class=lock onclick="toggleLock('${id}')" title="잠금 해제">🔒 잠김</button>`
       : `<button class=lock ${gold < lockCost(it) ? 'disabled' : ''} onclick="toggleLock('${id}')" title="다음 맵에서도 이 상품 유지">🔓 ${lockCost(it)}G</button>`;
     const pr2 = priceOf(it);
     return card(it, `<div class=btns><button ${gold < pr2 ? 'disabled' : ''} onclick="buy('${id}')">${pr2 < it.price ? `<s>${it.price}</s> ` : ''}${pr2} G 구매</button>${lockBtn}</div>`, locked ? 'locked' : '');
@@ -177,13 +177,10 @@ function shopHTML() {
   const potion = `<div class="card t0"><small>소모품</small><b>회복 물약</b><div class=d>HP를 전부 회복합니다.</div>
     <button ${gold < POTION_PRICE || full ? 'disabled' : ''} onclick="buyPotion()">${full ? 'HP 가득' : POTION_PRICE + ' G 구매'}</button></div>`;
   const sc = slotCost();
-  const slotCard = sc ? `<div class="card t0"><small>장비칸</small><b>장신구 칸 확장</b><div class=d>장신구를 ${accN + 1}개까지 장착 (현재 ${accN}칸)</div>
+  const slotCard = sc ? `<div class="card t0"><small>장비칸</small><b>장신구 칸 확장</b><div class=d>장신구를 ${accN + 1}개까지 장착</div>
     <button ${gold < sc ? 'disabled' : ''} onclick="buySlot()">${sc} G 구매</button></div>` : '';
   return `<div class=grid>${items || '<p>더 살 수 있는 장비가 없어요.</p>'}${potion}${slotCard}</div>
-  <div class=row><button ${gold < rerollCost() ? 'disabled' : ''} onclick="reroll()">상품 새로고침 (${rerollCost() ? rerollCost() + ' G' : '무료'}) — 잠근 상품은 유지</button></div>
-  <p><small>상품은 맵마다 바뀝니다. 마음에 드는 상품은 🔓 잠금(가격의 10%)하면 다음 맵에서도 남아 있어요.<br>
-  가진 장비는 [장비] 탭에서 <b>강화</b>할 수 있어요 (최대 +${UPG_MAX}, 단계마다 효과 +${UPG_STEP * 100}%).<br>
-  ${tierCap(nextCur()) < 2 ? '★★ 희귀 장비는 1-3부터, ' : ''}${tierCap(nextCur()) < 3 ? '★★★ 전설 장비는 2월드부터 등장해요.' : ''}</small></p>`;
+  <div class=row><button ${gold < rerollCost() ? 'disabled' : ''} onclick="reroll()">${rerollCost() ? `상품 새로고침 · ${rerollCost()} G` : '무료 새로고침'}</button></div>`;
 }
 
 const slotsFor = (it) => (it.slot === 'acc' ? Array.from({ length: accN }, (_, i) => 'acc' + (i + 1))
@@ -195,7 +192,7 @@ function upgBtn(id) {
   const L = upg[id] || 0;
   if (L >= UPG_MAX) return '<button disabled>강화 MAX</button>';
   const c = upgCost(id);
-  return `<button class=upgb ${gold < c ? 'disabled' : ''} onclick="enhance('${id}')">강화 +${L + 1} (${c}G)</button>`;
+  return `<button class=upgb ${gold < c ? 'disabled' : ''} onclick="enhance('${id}')">강화 +${L + 1} · ${c}G</button>`;
 }
 
 function equipHTML() {
@@ -212,15 +209,15 @@ function equipHTML() {
       : `<button onclick="equip('${id}')">장착</button>`;
     return card(it, `<div class=btns>${btn}${upgBtn(id)}</div>`);
   }).join('');
-  return `<h3>장착 중 (${gemAll() ? '무기 2 · 갑옷 2 · ' : ''}장신구 ${accN}칸${state === 'shop' && slotCost() ? ' · 상점에서 칸 확장 가능' : ''})</h3><div class=grid>${slots}</div>
+  return `<h3>장착 중</h3><div class=grid>${slots}</div>
   <h3>가방</h3><div class=grid>${bag || '<p>가방이 비어 있어요. 상점에서 장비를 사세요.</p>'}</div>${statsHTML()}`;
 }
 
 function gemHTML() {
   const cards = GEMS.map((x) => gems.includes(x.id)
     ? `<div class="card gem" style="border-color:${x.c}"><small>보석</small><div class=ch>${icImg('gem_' + x.id, 'icn')}<b style="color:${x.c}">${x.n}</b></div><div class=d>${x.d}</div></div>`
-    : `<div class="card empty"><small>보석</small><b>— ??? —</b><div class=d>보스(확정) · ★4·★5 몬스터 · 보물상자에서 얻을 수 있어요</div></div>`).join('');
-  return `<h3>보석 ${gems.length}/${GEMS.length} ${gemAll() ? '<span class=gold>— 세트 완성: 무기·갑옷·장신구 칸 +1</span>' : '<small>(모두 모으면 무기·갑옷·장신구 칸 +1)</small>'}</h3><div class=grid>${cards}</div>`;
+    : `<div class="card empty"><small>보석</small><b>— ??? —</b><div class=d>보스 · ★4·★5 몬스터 · 보물상자에서 얻을 수 있어요</div></div>`).join('');
+  return `<h3>보석 ${gems.length}/${GEMS.length} ${gemAll() ? '<span class=gold>— 세트 완성: 무기·갑옷·장신구 칸 +1</span>' : ''}</h3><div class=grid>${cards}</div>`;
 }
 
 function relicHTML() {
@@ -233,9 +230,9 @@ function statsHTML() {
   const rows = [
     ['공격력', T.atk.toFixed(1)], ['최대 HP', Math.round(T.maxhp)], ['공격 속도', pc(T.as)], ['이동 속도', Math.round(T.spd)],
     ['마법 위력', pc(T.mp)], ['마법구체', 1 + T.multi + '발'], ['마법 쿨타임', (MAG_CD * T.cdr).toFixed(2) + '초'],
-    ['한 번에 소환', Math.round(T.sn) + '마리'], ['최대 소환수', Math.round(T.smax) + '마리'], ['소환 레벨', `Lv.${summonLv()} (${sumDef(0).n}·${sumDef(1).n})`],
+    ['한 번에 소환', Math.round(T.sn) + '마리'], ['최대 소환수', Math.round(T.smax) + '마리'], ['소환 레벨', `Lv.${summonLv()} · ${sumDef(0).n}·${sumDef(1).n}`],
     ['소환수 강화', pc(T.sm)], ['소환 쿨타임', (SCD * T.scd).toFixed(1) + '초'], ['검 피해', pc(T.swd)],
-    ['받는 피해', (T.dr >= 0 ? '-' : '+') + pc(Math.abs(T.dr))], ['치명타', `${pc(T.crit)} (×${2 + T.critx})`], ['검 흡혈', pc(T.vamp)],
+    ['받는 피해', (T.dr >= 0 ? '-' : '+') + pc(Math.abs(T.dr))], ['치명타', pc(T.crit)], ['치명타 피해', `×${2 + T.critx}`], ['검 흡혈', pc(T.vamp)],
     ['처치 시 회복', T.ls], ['골드 획득', pc(T.gold)], ['최대 점프', T.mj + '단'],
   ];
   // 특수 효과는 있을 때만 표시
@@ -245,12 +242,12 @@ function statsHTML() {
     [T.psn, '☠ 독', `중첩당 초당 ${pc(T.psn)}`], [T.chain, '⚡ 연쇄 번개', T.chain + '명'], [T.swave, '검기', pc(T.swave)],
     [T.exe, '처형', pc(T.exe) + ' 이하'], [T.kboom, '💥 시체 폭발', pc(T.kboom)], [T.thorns, '반격', pc(T.thorns)],
     [T.revive, '부활', T.revive + '회'], [T.dodge, '회피', pc(T.dodge)],
-    [T.gdup, '골드 추가 획득', '×' + (1 + T.gdup)], [T.intr, '이자', `${pc(T.intr)} (최대 ${Math.round(800 * T.intr)}G)`],
+    [T.gdup, '골드 추가 획득', '×' + (1 + T.gdup)], [T.intr, '이자', pc(T.intr)], [T.intr, '이자 상한', `${Math.round(800 * T.intr)}G`],
     [T.vac, '자동 획득', '켜짐'], [T.luck, '★몬스터 확률', '+' + pc(T.luck)], [T.bounty, '★몬스터 보상', '×2'],
     [T.disc, '상점 할인', pc(T.disc)], [T.freeroll, '무료 새로고침', T.freeroll + '회'], [T.clrxp, '클리어 경험치', pc(T.clrxp)],
     [T.chest, '보물상자', '항상'], [T.gkill, '처치 골드', '+' + T.gkill],
     [T.combo, '3연타 콤보', '켜짐'], [T.slam, '내려찍기', '공중 S+공격'], [T.dash, '돌진 베기', '켜짐'],
-    [T.gfist, '최대 HP 비례 피해', pc(T.gfist)], [T.flesh, '살덩이 (HP 100당)', '-' + pc(T.flesh)],
+    [T.gfist, '최대 HP 비례 피해', pc(T.gfist)], [T.flesh, '살덩이 방어', `HP 100당 -${pc(T.flesh)}`],
     [T.lowx, '빈사 적 추가 피해', '+' + pc(T.lowx)], [T.healm, '회복량', '+' + pc(T.healm)], [T.frust, '피격 반격 폭발', pc(T.frust)],
     [T.swkill, '검 처치 보상', '+' + pc(T.swkill)], [T.swdrop, '검 처치 장비 드롭', '+' + pc(T.swdrop)],
   ].filter((r) => r[0]).map((r) => [r[1], r[2]]);
@@ -329,12 +326,58 @@ function equip(id, slot) {
 }
 function unequip(s) { eq[s] = null; recalc(); refreshMenu(); }
 
+// ----- 도움말: 설명이 길어지는 세부 규칙은 여기 모아둠 -----
+const HELP = [
+  ['상태 이상', [
+    ['❄ 빙결', '1.5초간 완전히 멈춤. 서리 반지로 시간이 늘어나요.'],
+    ['🔥 화상', '3초 동안 계속 피해를 입혀요. 장비에 적힌 수치는 초당 피해예요.'],
+    ['☠ 독', '맞을 때마다 한 겹씩, 최대 5겹까지 쌓이고 4초간 지속돼요.'],
+    ['⚡ 연쇄 번개', '적중한 곳에서 주변 적에게 번개가 튀어요. 숫자만큼 맞혀요.'],
+    ['💥 시체 폭발', '처치한 자리에서 터져 주변 적에게 피해를 줘요.'],
+    ['회피', '발동하면 그 공격의 피해를 완전히 무시해요.'],
+  ]],
+  ['능력치 한도', [
+    ['받는 피해 감소', '최대 70%'], ['치명타 확률', '최대 80%'], ['빙결 확률', '최대 75%'], ['회피', '최대 50%'],
+    ['치명타 피해', '기본 2배, 피의 계약 등으로 늘어나요.'],
+    ['쿨타임 감소', '장비·유물로 줄이는 양은 합쳐서 최대 70%'],
+  ]],
+  ['장비별 한도', [
+    ['연격의 쌍검', '콤보 검 피해 최대 +100%'], ['연쇄 학살', '공격 속도 최대 +100%, 50스택'],
+    ['광전사의 흉터', '받는 피해 최대 -30%'], ['살덩이 갑옷', '받는 피해 최대 -40%'],
+    ['사신의 장부', '마법구체 최대 +5'], ['마왕의 도감', '종족마다 피해 최대 +50%'],
+    ['포식자의 심장', '최대 HP만 늘고 현재 HP는 그대로예요.'],
+    ['영구 성장', '성장형 장비는 착용 중일 때만 쌓이고, 누적치는 장비에 남아서 다시 껴도 유지돼요. 판이 끝나면 사라져요.'],
+  ]],
+  ['골드 · 상점', [
+    ['이자', `클리어할 때 보유 골드에 붙어요. 상한은 이자율 × 800G, 10%면 80G까지.`],
+    ['상품', '맵마다 바뀌어요. 🔓 잠금은 가격의 10%이고, 잠근 상품은 새로고침해도 다음 맵까지 남아요.'],
+    ['강화', `상점의 장비 탭에서 최대 +${UPG_MAX}. 단계마다 효과 +${UPG_STEP * 100}%, 개수형 효과는 3단계마다 +1.`],
+    ['등급', '★★ 희귀 장비는 1-3부터, ★★★ 전설 장비는 2월드부터 상점에 나와요.'],
+    ['수집가의 자루', '맵에 남은 경험치·골드를 클리어 정산 때 2배로 받아요.'],
+  ]],
+  ['성장', [
+    ['보석', '보스는 확정으로 주고, ★4·★5 몬스터와 보물상자에서도 나와요. 4개를 모두 모으면 무기·갑옷·장신구 칸이 하나씩 늘어요.'],
+    ['점프 +1단', '공중에서 한 번 더 뛸 수 있어요. 2번 고르면 삼단 점프.'],
+    ['소환 레벨', '3·5·7·9에서 소환수가 진화해요. 소환 계열 강화는 고를 때마다 소환 레벨 +1.'],
+    ['★ 몬스터', '별이 많을수록 강하고 보상이 커요. 커서를 올리면 특성을 볼 수 있어요.'],
+    ['영혼석', `판이 끝나면 그 판에 모은 경험치의 ${Math.round(SOUL_RATE * 100)}%를 받아요. 도중에 포기해도 받아요. 메인 화면의 영혼의 제단에서 영구 강화에 써요.`],
+    ['대주교의 성역', '성역이 켜져 있는 동안은 무적이에요. 수정을 먼저 부수세요.'],
+  ]],
+];
+function helpHTML() {
+  return HELP.map(([h, rows]) => `<h3>${h}</h3><div class=grid>${rows.map(([k, v]) =>
+    `<div class="card help"><b>${k}</b><div class=d>${v}</div></div>`).join('')}</div>`).join('');
+}
+function helpMenu() {
+  show(`<h2>도움말</h2>${helpHTML()}<div class=row><button class=go onclick="title()">메인 화면</button></div>`, true);
+}
+
 // ----- 결과 -----
 function result(head, sub) {
   state = 'over'; mb = {};
   const got = grantSouls();
   show(`<h1>${head}</h1><p>${sub}</p>
-  <p class=soul>💠 영혼석 +${got} <small>(경험치 ${Math.round(runXp)} × ${Math.round(SOUL_RATE * 100)}%)</small> · 보유 <b>${meta.soul}</b></p>
+  <p class=soul>💠 영혼석 +${got} · 보유 <b>${meta.soul}</b></p>
   <div class=row><button class=go onclick="start()">다시 도전</button><button onclick="altar()">영혼의 제단</button><button onclick="toTitle()">메인 화면</button></div>`);
 }
 function over() { result('마왕, 쓰러지다', `${stageLabel()} ${stageDef().n} · Lv.${lvl} · 유물 ${relics.length}개`); }
