@@ -44,3 +44,6 @@ button.lock{flex:0 0 auto;border-color:#8a6a2a}
 .stats{display:grid;grid-template-columns:repeat(4,auto);gap:4px 18px;font-size:clamp(11px,1.4vw,15px);opacity:.9;text-align:left}
 .stats b{color:var(--gd);font-weight:normal;margin-left:4px}
 button.go{border-color:var(--gd)}
+.upg{color:#7affc0}
+button.upgb{border-color:#3aa07a}
+.card select{flex:1;font:inherit;font-size:inherit;color:var(--fg);background:#2a1633;border:2px solid var(--ac);padding:4px}

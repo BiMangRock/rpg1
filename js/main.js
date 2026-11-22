@@ -22,6 +22,8 @@ onkeydown = (e) => {
   if (state === 'shop' && (k === 'Enter' || k === 'NumpadEnter')) return nextStage();
   if (state !== 'play' || p.st === 'dead') return;
   if (k === KB.jmp) jump();
+  // S(아래): 발판 위에서 누르면 아래로 내려감
+  if (k === KB.dn && p.g && p.y < GY) { p.dn = 0.3; p.y += 4; p.g = 0; }
   if (k === KB.atk) atk();
   if (k === KB.mag) cast();
   if (k === KB.sum) { if (p.sc > 0) txt(p.x, p.y - 110, '소환 대기 ' + p.sc.toFixed(1) + '초', '#9a8aaa'); else sumCast(); }

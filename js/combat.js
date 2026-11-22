@@ -109,7 +109,7 @@ function freeze(e, t) {
 // ----- 적에게 피해 (실제로 깎인 HP 반환) -----
 // src: sw 검 / mg 마법 / sm 소환수 / ch 번개 / kb 처치폭발 / th 반격 / burn 화상 / psn 독
 const DMG_COL = { burn: '#ff9a40', psn: '#9aff5a', ch: '#bfe0ff', kb: '#ffb070' };
-function hit(e, d, k, crit, src) {
+function hit(e, d, k = 0, crit, src) {
   if (e.dead) return 0;
   if (e.inv > 0) { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
   if (crit) d *= 2 + T.critx;
@@ -133,6 +133,13 @@ function hit(e, d, k, crit, src) {
     if (src === 'sw' && T.psn) { e.psnS = Math.min(5, (e.psnT > 0 ? e.psnS : 0) + 1); e.psnT = 4; e.psnD = dm() * T.psn; }
     if (T.exe && e.t !== 'boss' && e.D.ai !== 'crystal' && e.hp > 0 && e.hp < e.mh * T.exe) { e.hp = 0; txt(e.x, e.y - e.h - 24, '처형!', '#ff4a6a'); }
   }
+  // ★몬스터 가시: 검으로 때리면 피해 일부 반사
+  if (src === 'sw' && e.af?.has('thorns') && p.inv <= 0) hurtP(Math.min(d * 0.2, e.dmg), null);
+  if (e.hp <= 0 && e.af?.has('revive') && !e.revived) {
+    e.revived = 1; e.hp = e.mh * 0.5;
+    txt(e.x, e.y - e.h - 30, '부활!', '#ff8aa8'); wave(e.x, e.y - e.h / 2, '#ff4a6a', 140);
+    return d;
+  }
   if (e.hp <= 0) { e.dead = 1; kill(e); }
   return d;
 }
@@ -142,14 +149,26 @@ function kill(e) {
   if (e.t === 'boss') return bossDown(e);
   if (T.ls) heal(T.ls);
   if (!e.D.minion && e.D.ai !== 'crystal') kills++;
+  // ★ 보상: 별 수의 제곱에 비례 (★5 = 경험치 13.5배, 골드 16배)
   const st = e.star || 0, bn = st && T.bounty ? 2 : 1, cy = e.y - e.h / 2;
-  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp * (1 + st) * bn, x: e.x, y: cy, vy: -200, life: 1e9 });
-  if (e.D.gold) dropGold(e.x, cy, (e.D.gold * (1 + st * 1.2) + T.gkill) * bn, st >= 2);
+  if (e.D.xp) dr.push({ k: 'xp', v: e.D.xp * (1 + st * st * 0.5) * bn, x: e.x, y: cy, vy: -200, life: 1e9 });
+  if (e.D.gold) dropGold(e.x, cy, (e.D.gold * (1 + st * st * 0.6) + T.gkill) * bn, st >= 2);
   else if (T.gkill) dropGold(e.x, cy, T.gkill);
   if (T.kboom) kq.push({ x: e.x, y: cy });
   if (!e.D.minion && (st >= 3 || R() < 0.15)) dr.push({ k: 'b', b: pickR(Object.keys(BF)), x: e.x, y: cy, vy: -300, life: 12 });
   // ★ 몬스터는 장비를 떨어뜨릴 수 있음
-  if (st && R() < st * STAR_ITEM * (1 + T.luck * 0.8)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
+  if (st && R() < STAR_ITEM[st] * (1 + T.luck * 0.8)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
+  if (st >= 5 && R() < 0.5) dropItem(e.x + 20, cy, 1);
+  if (st >= 5 && R() < STAR_RELIC * (1 + T.luck * 0.5)) {
+    const r = RELICS.filter((r) => !relics.includes(r.id));
+    if (r.length) dr.push({ k: 'rl', id: pickR(r).id, x: e.x, y: cy, vy: -500, life: 1e9 });
+  }
+  // ★몬스터 자폭
+  if (e.af?.has('kboom')) {
+    fx.push({ a: FR.exp, x: e.x, y: cy, d: 0.07, sz: 240, f: 1, t: 0 }); shake = Math.max(shake, 0.3);
+    if (Math.hypot(p.x - e.x, p.y - 45 - cy) < 130) hurtP(e.dmg * 1.3, null);
+    for (const a of al) if (Math.hypot(a.x - e.x, a.y - cy) < 130) hurtA(a, e.dmg * 1.3);
+  }
   if (st >= 3) txt(e.x, e.y - e.h - 30, '★'.repeat(st) + ' 처치!', '#ffd24a');
   // 분열: 죽으면 작은 분신 2마리
   if (e.af?.has('split'))
@@ -193,11 +212,14 @@ function dropGold(x, y, v, spread) {
 }
 
 // ----- 플레이어 피격 -----
-function hurtP(d) {
+// 플레이어 피격. src = 때린 적 (★몬스터 특성 적용)
+function hurtP(d, src) {
   if (p.inv > 0 || p.st === 'dead') return;
+  if (T.dodge && R() < T.dodge) { p.inv = 0.4; txt(p.x, p.y - 100, '회피!', '#9affff'); return; }
+  const A = src?.af;
+  if (A?.has('crit') && R() < 0.3) { d *= 2; txt(p.x, p.y - 118, '치명타!', '#ff4a4a'); }
   d *= (p.b.guard ? 0.4 : 1) * (1 - T.dr);
-  p.hp -= d; p.inv = 1;
-  txt(p.x, p.y - 100, Math.round(d), '#ff4a6a');
+  p.inv = 1;
   shake = 0.25;
   if (T.frzA && p.frzCd <= 0) {
     // 서리 갑주: 주변 적 빙결
@@ -205,17 +227,31 @@ function hurtP(d) {
     wave(p.x, p.y - 50, '#9ad8ff', 200);
     for (const e of en) if (Math.abs(e.x - p.x) < 200 && Math.abs(e.y - e.h / 2 - (p.y - 50)) < 160) freeze(e, 2 + T.frzT);
   }
-  if (p.hp <= 0) {
-    if (p.revUsed < T.revive) {
-      p.revUsed++; p.hp = T.maxhp * 0.5; p.inv = 2.5; shake = 0.6;
-      txt(p.x, p.y - 125, '불사의 심장 — 부활!', '#ff8aa8');
-      wave(p.x, p.y - 50, '#ff4a6a', 320);
-      return;
-    }
-    p.hp = 0; p.st = 'dead'; p.t = 0;
-    return;
+  if (A) {
+    // ★몬스터 적중 효과 (마왕이 장비로 쓰는 특성과 같은 계열)
+    if (A.has('frost')) { if (!(p.slowT > 0)) txt(p.x, p.y - 135, '❄ 둔화', '#9ad8ff'); p.slowT = 2; }
+    if (A.has('burn')) { p.burnT = 3; p.burnD = src.dmg * 0.3; }
+    if (A.has('poison')) { p.psnS = Math.min(5, (p.psnT > 0 ? p.psnS : 0) + 1); p.psnT = 4; p.psnD = src.dmg * 0.1; }
+    if (A.has('vamp') && !src.dead) { src.hp = Math.min(src.mh, src.hp + d * 1.5); txt(src.x, src.y - src.h - 10, '+' + Math.round(d * 1.5), '#ff8aa8'); }
   }
+  if (!loseHP(d, '#ff4a6a')) return;
   p.st = 'hurt'; p.t = 0; p.vy = -250; p.vx = -p.face * 160;
+}
+
+// HP 감소 (무적 무시). 쓰러지면 false
+function loseHP(d, c) {
+  p.hp -= d;
+  txt(p.x, p.y - 100, Math.round(d), c);
+  if (p.hp > 0) return true;
+  if (p.revUsed < T.revive) {
+    p.revUsed++; p.hp = T.maxhp * 0.5; p.inv = 2.5; shake = 0.6;
+    p.burnT = p.psnT = 0;
+    txt(p.x, p.y - 125, '불사의 심장 — 부활!', '#ff8aa8');
+    wave(p.x, p.y - 50, '#ff4a6a', 320);
+    return false;
+  }
+  p.hp = 0; p.st = 'dead'; p.t = 0;
+  return false;
 }
 
 // ----- 소환수 -----
@@ -281,13 +317,19 @@ function jump() {
 function pickRaw(d) {
   if (d.k === 'xp') xp += d.v * T.xpm;
   else if (d.k === 'g') gold += d.v * (1 + T.gdup);
+  else if (d.k === 'rl') {
+    if (relics.includes(d.id)) { gold += 80; return; }
+    relics.push(d.id); recalc();
+    txt(p.x, p.y - 130, `유물 획득! ${RELIC[d.id].n}`, '#ff8aa8');
+    wave(p.x, p.y - 50, '#ff4a6a', 200);
+  }
   else if (d.k === 'it') {
     if (inv.includes(d.id)) { gold += 40; return; }
     inv.push(d.id);
     lockd = lockd.filter((x) => x !== d.id);
     const it = ITEM[d.id], empty = slotsFor(it).find((s) => !eq[s]);
     if (empty) { eq[empty] = d.id; recalc(); }
-    txt(p.x, p.y - 130, `장비 획득! ${it.n}${empty ? ' (장착)' : ''}`, ['#fff', '#cfe6ff', '#e0b0ff', '#ffc070'][it.tier]);
+    txt(p.x, p.y - 130, `장비 획득! ${itemName(d.id)}${empty ? ' (장착)' : ''}`, ['#fff', '#cfe6ff', '#e0b0ff', '#ffc070'][it.tier]);
   }
 }
 

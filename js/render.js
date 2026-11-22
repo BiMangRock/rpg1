@@ -333,6 +333,9 @@ function drawP() {
   g.save(); g.globalAlpha = 0.35; g.fillStyle = '#000'; g.beginPath(); g.ellipse(sx, p.y + 2, 26, 6, 0, 0, 7); g.fill(); g.restore();
   g.save(); g.globalCompositeOperation = 'lighter';
   for (const k in p.b) glow(sx, p.y - 55, 80, hexRgb(BF[k][1]), 0.4);
+  if (p.slowT > 0) glow(sx, p.y - 50, 70, '120,200,255', 0.45);
+  if (p.burnT > 0) glow(sx, p.y - 40, 60, '255,110,30', 0.35 + 0.2 * Math.sin(time * 20));
+  if (p.psnT > 0) glow(sx, p.y - 50, 60, '120,255,60', 0.1 * p.psnS);
   g.restore();
   g.save(); g.translate(sx, p.y); g.scale(p.face, 1);
   if (p.inv > 0 && p.st !== 'dead' && ((time * 20) | 0) % 2) g.globalAlpha = 0.45;
@@ -499,6 +502,13 @@ function hud() {
   g.fillText(`${kl(KB.sum)} 소환 ${p.sc > 0 ? Math.ceil(p.sc) + '초' : '준비'}  (${al.length}/${MAXA})`, 82, 106);
   g.font = '13px "Do Hyeon",sans-serif'; g.fillStyle = '#ffffff99'; g.fillText(`${kl(KB.inv)} 장비창 · Esc 일시정지`, 16, H - 12);
   g.font = '16px "Do Hyeon",sans-serif'; g.fillStyle = '#fff';
+  // 상태이상 표시
+  const sts = [];
+  if (p.slowT > 0) sts.push(['❄ 둔화', '#9ad8ff']);
+  if (p.burnT > 0) sts.push(['🔥 화상', '#ff9a40']);
+  if (p.psnT > 0) sts.push([`☠ 독 ${p.psnS}`, '#9aff5a']);
+  sts.forEach(([t, c], i) => { g.fillStyle = c; g.fillText(t, 244 + i * 64, 27); });
+  g.fillStyle = '#fff';
   let bx = 16;
   for (const k in p.b) { g.fillStyle = BF[k][1]; g.fillRect(bx, 116, 18, 18); g.fillStyle = '#fff'; g.fillText(Math.ceil(p.b[k]), bx + 22, 130); bx += 56; }
   // 골드 / 유물

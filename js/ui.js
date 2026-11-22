@@ -52,8 +52,14 @@ function start() { hide(); newRun(); state = 'play'; }
 // ----- 레벨업 -----
 function menu() {
   state = 'lvl'; mb = {};
-  const a = shuffle(UPGRADES.map((_, i) => i).filter((i) => !UPGRADES[i].max || (upc[i] || 0) < UPGRADES[i].max));
-  opts = a.slice(0, 3);
+  // 가중치(w) 비례로 서로 다른 3개 뽑기
+  const cand = UPGRADES.map((_, i) => i).filter((i) => !UPGRADES[i].max || (upc[i] || 0) < UPGRADES[i].max);
+  opts = [];
+  while (opts.length < 3 && cand.length) {
+    let r = R() * cand.reduce((s, i) => s + (UPGRADES[i].w || 1), 0), j = 0;
+    while ((r -= UPGRADES[cand[j]].w || 1) > 0) j++;
+    opts.push(cand.splice(Math.min(j, cand.length - 1), 1)[0]);
+  }
   show(`<h1>LEVEL UP!</h1><p>Lv.${lvl} · 강화를 선택하세요 (1~3 키)</p>
   <div class=row>${opts.map((k, i) => `<button class=up onclick="pickUp(${i})"><b>${i + 1}. ${UPGRADES[k].n}</b><small>현재 ${upc[k] || 0}단계</small></button>`).join('')}</div>`);
 }
@@ -111,8 +117,14 @@ function shopMenu(tab, fresh) {
   <div class=row><button class=go onclick="nextStage()">다음 스테이지 ▶ (Enter)</button></div>`, true);
 }
 
-const card = (it, btn, cls = '') =>
-  `<div class="card t${it.tier} ${cls}"><small>${SLOT[it.slot]} · <span class=tier>${'★'.repeat(it.tier)} ${TIER_NAME[it.tier]}</span></small><b>${it.n}</b><div class=d>${it.d}</div>${btn}</div>`;
+const card = (it, btn, cls = '') => {
+  const L = upg[it.id] || 0;
+  return `<div class="card t${it.tier} ${cls}"><small>${SLOT[it.slot]} · <span class=tier>${'★'.repeat(it.tier)} ${TIER_NAME[it.tier]}</span></small>` +
+    `<b>${it.n}${L ? ` <span class=upg>+${L}</span>` : ''}</b><div class=d>${it.d}${L ? `<br><span class=upg>강화 효과 ×${(1 + UPG_STEP * L).toFixed(2)}${L >= 3 ? ' · 개수형 +' + Math.floor(L / 3) : ''}</span>` : ''}</div>${btn}</div>`;
+};
+// 강화 비용 / 장신구 칸 확장 비용
+const upgCost = (id) => Math.round(ITEM[id].price * UPG_COST * ((upg[id] || 0) + 1) * (1 - T.disc));
+const slotCost = () => ACC_SLOT_PRICE[accN - ACC_BASE];
 
 function shopHTML() {
   const items = stock.map((id) => {
@@ -128,29 +140,42 @@ function shopHTML() {
   const full = p.hp >= T.maxhp;
   const potion = `<div class="card t0"><small>소모품</small><b>회복 물약</b><div class=d>HP를 전부 회복합니다.</div>
     <button ${gold < POTION_PRICE || full ? 'disabled' : ''} onclick="buyPotion()">${full ? 'HP 가득' : POTION_PRICE + ' G 구매'}</button></div>`;
-  return `<div class=grid>${items || '<p>더 살 수 있는 장비가 없어요.</p>'}${potion}</div>
+  const sc = slotCost();
+  const slotCard = sc ? `<div class="card t0"><small>장비칸</small><b>장신구 칸 확장</b><div class=d>장신구를 ${accN + 1}개까지 장착 (현재 ${accN}칸)</div>
+    <button ${gold < sc ? 'disabled' : ''} onclick="buySlot()">${sc} G 구매</button></div>` : '';
+  return `<div class=grid>${items || '<p>더 살 수 있는 장비가 없어요.</p>'}${potion}${slotCard}</div>
   <div class=row><button ${gold < rerollCost() ? 'disabled' : ''} onclick="reroll()">상품 새로고침 (${rerollCost() ? rerollCost() + ' G' : '무료'}) — 잠근 상품은 유지</button></div>
   <p><small>상품은 맵마다 바뀝니다. 마음에 드는 상품은 🔓 잠금(가격의 10%)하면 다음 맵에서도 남아 있어요.<br>
+  가진 장비는 [장비] 탭에서 <b>강화</b>할 수 있어요 (최대 +${UPG_MAX}, 단계마다 효과 +${UPG_STEP * 100}%).<br>
   ${tierCap(nextCur()) < 2 ? '★★ 희귀 장비는 1-3부터, ' : ''}${tierCap(nextCur()) < 3 ? '★★★ 전설 장비는 2월드부터 등장해요.' : ''}</small></p>`;
 }
 
-const slotsFor = (it) => (it.slot === 'acc' ? ['acc1', 'acc2'] : [it.slot]);
+const slotsFor = (it) => (it.slot === 'acc' ? Array.from({ length: accN }, (_, i) => 'acc' + (i + 1)) : [it.slot]);
+
+// 상점(정비 화면)에서만 강화 버튼 표시
+function upgBtn(id) {
+  if (state !== 'shop') return '';
+  const L = upg[id] || 0;
+  if (L >= UPG_MAX) return '<button disabled>강화 MAX</button>';
+  const c = upgCost(id);
+  return `<button class=upgb ${gold < c ? 'disabled' : ''} onclick="enhance('${id}')">강화 +${L + 1} (${c}G)</button>`;
+}
 
 function equipHTML() {
-  const worn = Object.values(eq);
-  const slots = Object.keys(EQ_SLOTS).map((s) => {
+  const worn = Object.values(eq), names = eqSlotNames();
+  const slots = Object.keys(names).map((s) => {
     const it = eq[s] && ITEM[eq[s]];
-    if (!it) return `<div class="card empty"><small>${EQ_SLOTS[s]}</small><b>— 비어 있음 —</b><div class=d></div></div>`;
-    return card(it, `<button onclick="unequip('${s}')">해제</button>`, 'eq');
+    if (!it) return `<div class="card empty"><small>${names[s]}</small><b>— 비어 있음 —</b><div class=d></div></div>`;
+    return card(it, `<div class=btns><button onclick="unequip('${s}')">해제</button>${upgBtn(it.id)}</div>`, 'eq');
   }).join('');
   const bag = inv.filter((id) => !worn.includes(id)).map((id) => {
     const it = ITEM[id], sl = slotsFor(it);
     const btn = sl.length > 1 && sl.every((s) => eq[s])
-      ? `<div class=btns>${sl.map((s, i) => `<button onclick="equip('${id}','${s}')">${i + 1}번과 교체</button>`).join('')}</div>`
+      ? `<select onchange="if(this.value)equip('${id}',this.value)"><option value="">장착할 칸 선택…</option>${sl.map((s) => `<option value="${s}">${names[s]}: ${itemName(eq[s])}와 교체</option>`).join('')}</select>`
       : `<button onclick="equip('${id}')">장착</button>`;
-    return card(it, btn);
+    return card(it, `<div class=btns>${btn}${upgBtn(id)}</div>`);
   }).join('');
-  return `<h3>장착 중</h3><div class=grid>${slots}</div>
+  return `<h3>장착 중 (장신구 ${accN}칸${state === 'shop' && slotCost() ? ' · 상점에서 칸 확장 가능' : ''})</h3><div class=grid>${slots}</div>
   <h3>가방</h3><div class=grid>${bag || '<p>가방이 비어 있어요. 상점에서 장비를 사세요.</p>'}</div>${statsHTML()}`;
 }
 
@@ -174,7 +199,7 @@ function statsHTML() {
     [T.sfrz, '소환수 빙결', pc(T.sfrz)], [T.frzA, '피격 시 빙결', '켜짐'], [T.burn, '🔥 화상', `초당 ${pc(T.burn)}`],
     [T.psn, '☠ 독', `중첩당 초당 ${pc(T.psn)}`], [T.chain, '⚡ 연쇄 번개', T.chain + '명'], [T.swave, '검기', pc(T.swave)],
     [T.exe, '처형', pc(T.exe) + ' 이하'], [T.kboom, '💥 시체 폭발', pc(T.kboom)], [T.thorns, '반격', pc(T.thorns)],
-    [T.revive, '부활', T.revive + '회'],
+    [T.revive, '부활', T.revive + '회'], [T.dodge, '회피', pc(T.dodge)],
     [T.gdup, '골드 추가 획득', '×' + (1 + T.gdup)], [T.intr, '이자', `${pc(T.intr)} (최대 ${Math.round(800 * T.intr)}G)`],
     [T.vac, '자동 획득', '켜짐'], [T.luck, '★몬스터 확률', '+' + pc(T.luck)], [T.bounty, '★몬스터 보상', '×2'],
     [T.disc, '상점 할인', pc(T.disc)], [T.freeroll, '무료 새로고침', T.freeroll + '회'], [T.clrxp, '클리어 경험치', pc(T.clrxp)],
@@ -194,6 +219,22 @@ function buy(id) {
   const empty = slotsFor(it).find((s) => !eq[s]);
   if (empty) eq[empty] = id;
   recalc();
+  shopMenu();
+}
+function enhance(id) {
+  const c = upgCost(id);
+  if (gold < c || (upg[id] || 0) >= UPG_MAX) return;
+  gold -= c;
+  upg[id] = (upg[id] || 0) + 1;
+  recalc();
+  shopMenu();
+}
+function buySlot() {
+  const c = slotCost();
+  if (!c || gold < c) return;
+  gold -= c;
+  accN++;
+  eq['acc' + accN] = null;
   shopMenu();
 }
 function toggleLock(id) {

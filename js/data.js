@@ -19,14 +19,25 @@ const SHOP_SIZE = 5;      // 상점 진열 수
 // ★ 몬스터: 일반 적이 확률적으로 ★1~5 등급으로 등장 (등급이 높을수록 강하고 보상이 큼)
 const STAR_CHANCE = 0.07;    // 기본 등장 확률 (스테이지가 깊어질수록 조금씩 증가)
 const STAR_UP = 0.35;        // 한 단계 더 높은 별이 붙을 확률 (깊어질수록 증가)
-const STAR_ITEM = 0.06;      // 별 1개당 장비 드롭 확률
+const STAR_ITEM = [0, 0.08, 0.18, 0.32, 0.55, 1]; // 별 수별 장비 드롭 확률 (★5는 확정, 50% 확률로 1개 더)
+const STAR_RELIC = 0.2;      // ★5 처치 시 유물 드롭 확률
+// 장비 강화 / 칸 확장 (상점)
+const UPG_MAX = 5;           // 최대 +5
+const UPG_STEP = 0.25;       // 강화 1단계마다 효과 +25%
+const UPG_COST = 0.4;        // 강화 비용 = 장비 가격 × 0.4 × (다음 단계)
+const ACC_BASE = 3;          // 기본 장신구 칸
+const ACC_SLOT_PRICE = [150, 260, 400]; // 장신구 4·5·6번째 칸 가격
 const CHEST_CHANCE = 0.4;    // 스테이지에 보물상자가 나올 확률
 // ★ 몬스터 특수 능력: ★2는 랜덤 1개, ★3부터 '용사의 갑옷', ★4부터 '다단 점프', ★5는 '용사의 검기' 고정 + 랜덤
+// 마왕이 장비로 얻는 특성(빙결, 화상, 독, 흡혈, 가시, 치명타, 부활, 번개, 시체 폭발)도 ★몬스터가 가질 수 있음
 const AFFIX = {
   armor: '용사갑옷', jump: '다단점프', wave: '용사검기', haste: '신속', regen: '재생',
   holy: '성방패', blink: '순간이동', split: '분열', rage: '광폭', call: '호출',
+  frost: '빙결타', burn: '화염타', poison: '독타', vamp: '흡혈', thorns: '가시',
+  crit: '치명', revive: '부활', chain: '번개', kboom: '자폭',
 };
-const AFFIX_RANDOM = ['haste', 'regen', 'holy', 'blink', 'split', 'rage', 'call', 'jump'];
+const AFFIX_RANDOM = ['haste', 'regen', 'holy', 'blink', 'split', 'rage', 'call', 'jump',
+  'frost', 'burn', 'poison', 'vamp', 'thorns', 'crit', 'revive', 'chain', 'kboom'];
 
 // ----- 월드 / 스테이지 -----
 // 월드마다 일반 스테이지 5개 + 마지막 보스 스테이지
@@ -77,10 +88,17 @@ const ENEMY = {
 };
 
 // ----- 레벨업 강화 (S = 레벨업으로 쌓이는 기본 스탯) -----
+// w: 나올 확률 가중치 (기본 1), max: 최대 횟수
 const UPGRADES = [
   { n: '공격력 +20%', f: () => (S.atk *= 1.2) },
-  { n: '공격 속도 +15%', f: () => (S.as *= 1.15) },
-  { n: '이동 속도 +12%', f: () => (S.spd *= 1.12) },
+  { n: '공격 속도 +15%', f: () => (S.as *= 1.15), w: 1.5 },
+  { n: '이동 속도 +15%', f: () => (S.spd *= 1.15), w: 2 },
+  { n: '질풍: 이동 속도 +20%, 점프력 +8%', f: () => { S.spd *= 1.2; S.jump *= 1.08; }, w: 1.5 },
+  { n: '회피 +8%', f: () => (S.dodge = (S.dodge || 0) + 0.08), max: 4, w: 1.5 },
+  { n: '치명타 확률 +8%', f: () => (S.crit = (S.crit || 0) + 0.08), max: 4 },
+  { n: '받는 피해 -7%', f: () => (S.dr = (S.dr || 0) + 0.07), max: 4 },
+  { n: '빙결 확률 +7%', f: () => (S.frz = (S.frz || 0) + 0.07), max: 3 },
+  { n: '처치 시 골드 +1', f: () => (S.gkill = (S.gkill || 0) + 1), max: 3 },
   { n: '최대 HP +25 · 회복', f: () => { S.maxhp += 25; p.hp += 40; } },
   { n: '마법구체 +1발', f: () => S.multi++ },
   { n: '폭발 범위 +25%', f: () => (S.area *= 1.25) },
@@ -100,6 +118,7 @@ const UPGRADES = [
 //  쿨타임 감소: cdr scd                              (0.2  = -20%)
 //  더하기:     maxhp multi ls mj sn crit vamp dr thorns revive
 //    crit: 치명타 확률 / critx: 치명타 배율 추가(기본 2배) / vamp: 검 피해 흡혈 비율
+//    dodge: 회피 확률 (피해 완전 무시)
 //    dr: 받는 피해 감소(음수면 증가) / thorns: 닿은 적에게 공격력×값 반격 / revive: 스테이지마다 부활 횟수
 //  특수 효과:
 //    frz: 검·마법 적중 시 빙결 확률 (보스는 둔화) / frzT: 빙결 시간 추가(초) / frzB: 빙결된 적에게 추가 피해
@@ -114,13 +133,13 @@ const UPGRADES = [
 //    disc: 상점 가격 할인 / freeroll: 상점마다 무료 새로고침 횟수 / clrxp: 클리어 시 레벨업 게이지 획득
 //    chest: 보물상자 항상 등장 + 보상 증가 / gkill: 적 처치 시 골드 추가
 const SLOT = { wpn: '무기', arm: '갑옷', acc: '장신구' };              // 아이템 종류
-const EQ_SLOTS = { wpn: '무기', arm: '갑옷', acc1: '장신구 1', acc2: '장신구 2' }; // 장착 칸
 const TIER_NAME = ['', '일반', '희귀', '전설'];
 
 const ITEMS = [
   // ===== 무기 =====
   { id: 'rust',    slot: 'wpn', tier: 1, price: 50,  n: '녹슨 마검',      d: '공격력 +25%', m: { atk: 0.25 } },
   { id: 'grim',    slot: 'wpn', tier: 1, price: 80,  n: '심연의 마도서',  d: '마법 위력 +50%', m: { mp: 0.5 } },
+  { id: 'quick',   slot: 'wpn', tier: 1, price: 70,  n: '쾌속 단검',      d: '공격 속도 +25%, 이동 속도 +12%', m: { as: 0.25, spd: 0.12 } },
   { id: 'vampsw',  slot: 'wpn', tier: 1, price: 120, n: '흡혈 대검',      d: '공격력 +30%, 검 피해의 8% 흡혈', m: { atk: 0.3, vamp: 0.08 } },
   { id: 'frostpk', slot: 'wpn', tier: 2, price: 180, n: '서리 송곳',      d: '공격력 +25%, 적중 시 20% 확률로 ❄빙결 (1.5초 정지)', m: { atk: 0.25, frz: 0.2 } },
   { id: 'flame',   slot: 'wpn', tier: 2, price: 170, n: '화염 지팡이',    d: '마법 위력 +40%, 마법 폭발이 3초간 🔥불태움 (초당 공격력 80%)', m: { mp: 0.4, burn: 0.8 } },
@@ -136,6 +155,7 @@ const ITEMS = [
   { id: 'windc',   slot: 'arm', tier: 1, price: 90,  n: '바람의 외투',    d: '이동 속도 +20%, 점프 +1단', m: { spd: 0.2, mj: 1 } },
   { id: 'iron',    slot: 'arm', tier: 1, price: 120, n: '흑철 갑옷',      d: '최대 HP +60, 받는 피해 -12%', m: { maxhp: 60, dr: 0.12 } },
   { id: 'frostar', slot: 'arm', tier: 2, price: 190, n: '서리 갑주',      d: '최대 HP +50, 받는 피해 -15%, 맞으면 주변 적 ❄빙결', m: { maxhp: 50, dr: 0.15, frzA: 1 } },
+  { id: 'shadow',  slot: 'arm', tier: 2, price: 180, n: '그림자 망토',    d: '이동 속도 +30%, 회피 +12%, 최대 HP +20', m: { spd: 0.3, dodge: 0.12, maxhp: 20 } },
   { id: 'robe',    slot: 'arm', tier: 2, price: 170, n: '피의 로브',      d: '최대 HP +40, 처치 시 HP +4, 검 흡혈 5%', m: { maxhp: 40, ls: 4, vamp: 0.05 } },
   { id: 'thorn',   slot: 'arm', tier: 2, price: 200, n: '가시 갑주',      d: '최대 HP +60, 받는 피해 -15%, 닿은 적에게 공격력 300% 반격', m: { maxhp: 60, dr: 0.15, thorns: 3 } },
   { id: 'dragon',  slot: 'arm', tier: 3, price: 340, n: '용린 갑주',      d: '최대 HP +150, 받는 피해 -25%', m: { maxhp: 150, dr: 0.25 } },
@@ -144,6 +164,10 @@ const ITEMS = [
   { id: 'coin',    slot: 'acc', tier: 1, price: 60,  n: '행운의 동전',    d: '골드 획득 +50%', m: { gold: 0.5 } },
   { id: 'sage',    slot: 'acc', tier: 1, price: 80,  n: '현자의 반지',    d: '경험치 +40%, 아이템 자석 +80%', m: { xpm: 0.4, mag: 0.8 } },
   { id: 'hunter',  slot: 'acc', tier: 1, price: 120, n: '사냥꾼의 목걸이', d: '치명타 확률 +20%', m: { crit: 0.2 } },
+  { id: 'feather', slot: 'acc', tier: 1, price: 60,  n: '가벼운 깃털',    d: '이동 속도 +18%, 점프 +1단', m: { spd: 0.18, mj: 1 } },
+  { id: 'mistrg',  slot: 'acc', tier: 2, price: 150, n: '안개 반지',      d: '회피 +15% (피해를 완전히 무시)', m: { dodge: 0.15 } },
+  { id: 'gale',    slot: 'acc', tier: 2, price: 160, n: '질풍의 발찌',    d: '이동 속도 +25%, 공격 속도 +20%', m: { spd: 0.25, as: 0.2 } },
+  { id: 'hermes',  slot: 'acc', tier: 3, price: 300, n: '헤르메스의 날개', d: '이동 속도 +40%, 점프 +2단, 회피 +15%', m: { spd: 0.4, mj: 2, dodge: 0.15 } },
   { id: 'frostrg', slot: 'acc', tier: 2, price: 150, n: '서리 반지',      d: '❄빙결 확률 +12%, 빙결 시간 +1초', m: { frz: 0.12, frzT: 1 } },
   { id: 'hourear', slot: 'acc', tier: 2, price: 170, n: '시간의 귀걸이',  d: '마법·소환 쿨타임 -30%', m: { cdr: 0.3, scd: 0.3 } },
   { id: 'soul',    slot: 'acc', tier: 2, price: 170, n: '영혼의 부적',    d: '소환수 강화 +60%, 소환수 +1', m: { sm: 0.6, sn: 1 } },
@@ -180,6 +204,7 @@ const RELICS = [
   { id: 'iceq',   n: '얼음 여왕의 심장', d: '❄빙결 확률 +20%, 맞으면 주변 적 빙결', m: { frz: 0.2, frzA: 1 } },
   { id: 'hellf',  n: '지옥불 인장',     d: '마법 폭발 🔥화상 (초당 공격력 120%)', m: { burn: 1.2 } },
   { id: 'stormc', n: '폭풍의 핵',       d: '마법 폭발 시 ⚡연쇄 번개 3명', m: { chain: 3 } },
+  { id: 'boots',  n: '바람신의 장화',   d: '이동 속도 +35%, 회피 +10%', m: { spd: 0.35, dodge: 0.1 } },
   { id: 'stone',  n: '연금술사의 돌',   d: '이자 20% (최대 160G), 골드 +30%', m: { intr: 0.2, gold: 0.3 } },
   { id: 'hoard',  n: '용의 보물더미',   d: '골드를 주울 때마다 같은 양 추가, 보물상자 항상 등장', m: { gdup: 1, chest: 1 } },
   { id: 'star',   n: '떨어진 별',       d: '★몬스터 등장 확률 +100%, 장비 드롭 +80%, 보상 2배', m: { luck: 1, bounty: 1 } },

@@ -41,13 +41,19 @@ function starAI(e, dt, dx) {
     e.wvT = 2.6;
     const ang = Math.atan2(p.y - 50 - (e.y - e.h * 0.6), dx);
     for (const o of [-0.14, 0, 0.14])
-      eb.push({ x: e.x, y: e.y - e.h * 0.6, vx: Math.cos(ang + o) * 380, vy: Math.sin(ang + o) * 380, life: 2.5, d: e.dmg * 0.7, r: 12, c: '#9ad8ff' });
+      eb.push({ x: e.x, y: e.y - e.h * 0.6, vx: Math.cos(ang + o) * 380, vy: Math.sin(ang + o) * 380, life: 2.5, d: e.dmg * 0.7, r: 12, c: '#9ad8ff', src: e });
   }
   if (A.has('blink') && (e.blT -= dt) <= 0 && Math.hypot(dx, p.y - e.y) > 420) {
     e.blT = 6;
     wave(e.x, cy, '#c08aff', 90);
     e.x = cl(p.x + (R() < 0.5 ? -1 : 1) * rr(120, 180), 20, WW - 20); e.y = p.y - 10; e.vy = 0;
     wave(e.x, e.y - e.h / 2, '#c08aff', 90);
+  }
+  if (A.has('chain') && (e.chT = (e.chT ?? 2) - dt) <= 0 && Math.hypot(dx, p.y - e.y) < 380) {
+    // 번개: 마왕에게 직접 번개
+    e.chT = 3.5;
+    zp.push({ x1: e.x, y1: cy, x2: p.x, y2: p.y - 50, t: 0 });
+    hurtP(e.dmg * 0.6, e);
   }
   if (e.hp < mh * 0.5) {
     if (A.has('rage') && !e.rg) { e.rg = 1; txt(e.x, e.y - e.h - 30, '광폭!', '#ff4a4a'); }
@@ -121,7 +127,7 @@ function updEnemies(dt) {
         if (e.sh <= 0 && ad < 520) {
           e.sh = 2.2;
           const ang = Math.atan2(ty - (e.y - 45), tdx);
-          eb.push({ x: e.x, y: e.y - 45, vx: Math.cos(ang) * 280, vy: Math.sin(ang) * 280, life: 3, d: dmg, ar: 1 });
+          eb.push({ x: e.x, y: e.y - 45, vx: Math.cos(ang) * 280, vy: Math.sin(ang) * 280, life: 3, d: dmg, ar: 1, src: e });
         }
       } else {
         if (!climb(e, spd, dt)) {
@@ -145,7 +151,7 @@ function updEnemies(dt) {
           }
       // 플레이어 몸통 박치기
       if (p.inv <= 0 && p.st !== 'dead' && Math.abs(dx) < (e.w + 30) / 2 && p.y > e.y - e.h && p.y - 90 < e.y) {
-        hurtP(dmg);
+        hurtP(dmg, e);
         if (T.thorns && !e.dead) hit(e, dm() * T.thorns, -e.dir * 200, false, 'th');
       }
     }

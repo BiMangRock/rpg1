@@ -15,7 +15,7 @@ const shuffle = (arr) => arr.map((v) => [R(), v]).sort((a, b) => a[0] - b[0]).ma
 let state = 'title'; // title | play | pause | lvfx | lvl | relic | shop | over
 let time = 0, shake = 0, ban = null, spt = 0, bossT = 0, winT = 0;
 let S, T, p, lvl, xp, need, upc, opts;  // S: 레벨업 스탯, T: 장비·유물까지 합친 최종 스탯
-let gold, inv, eq, relics, stock, relicOpts, lockd = [], rerollN = 0;
+let gold, inv, eq, relics, stock, relicOpts, lockd = [], rerollN = 0, upg = {}, accN = ACC_BASE;
 let cur = { w: 0, s: 0 }, kills = 0, portal = null, boss = null, bdone = 0, cam = 0, camY = 0, pl = [], map = null;
 let chests = [], clearMsg = '';
 // en 적, pr 마법구체, eb 적 탄, dr 드롭, fx 스프라이트 이펙트, tx 숫자, al 소환수,
@@ -41,17 +41,38 @@ const tierCap = (c) => (c.w >= 1 ? 3 : c.s >= 2 ? 2 : 1);
 const PCT_KEYS = ['atk', 'as', 'spd', 'mp', 'area', 'xpm', 'mag', 'sm', 'gold'];
 const CD_KEYS = ['cdr', 'scd'];
 
+// 장비 강화: 수치 효과는 단계마다 +25%, 개수형(마법구체·소환수·번개·점프)은 +3에서 +1
+const INT_UP = ['multi', 'sn', 'chain', 'mj', 'freeroll'];
+const NO_SCALE = ['revive', 'vac', 'frzA', 'chest', 'gdup', 'bounty', 'freeroll'];
+function modsOf(id) {
+  const base = ITEM[id].m, L = upg[id] || 0, m = {};
+  for (const k in base) {
+    const v = base[k];
+    if (INT_UP.includes(k)) m[k] = v + (v > 0 ? Math.floor(L / 3) : 0);
+    else if (NO_SCALE.includes(k) || v < 0) m[k] = v;
+    else m[k] = v * (1 + UPG_STEP * L);
+  }
+  return m;
+}
+const itemName = (id) => ITEM[id].n + (upg[id] ? ` +${upg[id]}` : '');
+const eqSlotNames = () => {
+  const o = { wpn: '무기', arm: '갑옷' };
+  for (let i = 1; i <= accN; i++) o['acc' + i] = '장신구 ' + i;
+  return o;
+};
+
 function activeMods() {
   const list = [];
-  for (const s in eq) if (eq[s]) list.push(ITEM[eq[s]].m);
+  for (const s in eq) if (eq[s]) list.push(modsOf(eq[s]));
   for (const r of relics) list.push(RELIC[r].m);
   return list;
 }
 
 function recalc() {
-  T = { ...S, gold: 1, crit: 0, critx: 0, vamp: 0, dr: 0, thorns: 0, revive: 0,
+  // 기본값 → 레벨업 스탯(S)으로 덮어쓰기 → 장비·유물 더하기
+  T = { gold: 1, crit: 0, critx: 0, vamp: 0, dr: 0, thorns: 0, revive: 0, dodge: 0,
         frz: 0, frzT: 0, frzB: 0, sfrz: 0, frzA: 0, burn: 0, psn: 0, chain: 0, swave: 0, exe: 0, kboom: 0,
-        gdup: 0, intr: 0, vac: 0, luck: 0, bounty: 0, disc: 0, freeroll: 0, clrxp: 0, chest: 0, gkill: 0 };
+        gdup: 0, intr: 0, vac: 0, luck: 0, bounty: 0, disc: 0, freeroll: 0, clrxp: 0, chest: 0, gkill: 0, ...S };
   const add = {};
   for (const m of activeMods()) for (const k in m) add[k] = (add[k] || 0) + m[k];
   for (const k in add) {
@@ -62,6 +83,7 @@ function recalc() {
   T.dr = Math.min(0.7, T.dr);
   T.crit = Math.min(0.8, T.crit);
   T.frz = Math.min(0.75, T.frz);
+  T.dodge = Math.min(0.5, T.dodge);
   if (p) p.hp = Math.min(p.hp, T.maxhp);
 }
 
@@ -69,10 +91,13 @@ function recalc() {
 function newRun() {
   S = { atk: 10, maxhp: 100, spd: 230, as: 1, cdr: 1, area: 1, multi: 0, ls: 0, xpm: 1, jump: 640, mag: 1, mp: 1, mj: 1, sn: 3, scd: 1, sm: 1 };
   lvl = 1; xp = 0; need = 6; upc = {};
-  gold = 0; inv = []; eq = { wpn: null, arm: null, acc1: null, acc2: null }; relics = []; stock = []; lockd = [];
+  gold = 0; inv = []; relics = []; stock = []; lockd = []; upg = {}; accN = ACC_BASE;
+  eq = { wpn: null, arm: null };
+  for (let i = 1; i <= accN; i++) eq['acc' + i] = null;
   al = [];
   p = { x: 120, y: GY, vx: 0, vy: 0, face: 1, hp: 100, g: 1, st: 'n', t: 0, inv: 0, cd: 0, sc: 0, jc: 0,
-        kind: 'mag', am: null, b: {}, hit: 0, fired: 0, dn: 0, revUsed: 0, frzCd: 0 };
+        kind: 'mag', am: null, b: {}, hit: 0, fired: 0, dn: 0, revUsed: 0, frzCd: 0,
+        slowT: 0, burnT: 0, psnT: 0, psnS: 0, dotT: 0.5 };
   recalc();
   p.hp = T.maxhp;
   cur = { w: 0, s: 0 };
@@ -84,6 +109,7 @@ function go() {
   kills = 0; portal = null; boss = null; bdone = 0; bossT = 2; spt = 0; winT = 0;
   en = []; pr = []; eb = []; dr = []; fx = []; tx = []; pt = []; rg = []; hz = []; wv = []; kq = []; zp = [];
   p.x = 120; p.y = GY; p.vx = p.vy = 0; p.st = 'n'; p.revUsed = 0; p.inv = 1; cam = 0;
+  p.slowT = p.burnT = p.psnT = 0;
   // 소환수는 다음 스테이지로 따라온다
   for (const a of al) { a.x = p.x + a.o * 1.2; a.y = a.t === 'bat' ? p.y - 80 : GY; a.cd = 0; }
   // 랜덤 맵

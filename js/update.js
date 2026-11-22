@@ -20,8 +20,18 @@ function updPlayer(dt) {
     if (p.t > 1.6) over();
   } else {
     const d = (keys[KB.R] ? 1 : 0) - (keys[KB.L] ? 1 : 0);
-    const sp = T.spd * (p.b.spd ? 1.4 : 1) * (p.st === 'atk' || p.st === 'cast' ? 0.45 : 1);
-    p.cd -= dt; p.sc -= dt; p.inv -= dt; p.dn -= dt; p.frzCd -= dt;
+    const sp = T.spd * (p.b.spd ? 1.4 : 1) * (p.st === 'atk' || p.st === 'cast' ? 0.45 : 1) * (p.slowT > 0 ? 0.55 : 1);
+    p.cd -= dt; p.sc -= dt; p.inv -= dt; p.dn -= dt; p.frzCd -= dt; p.slowT -= dt;
+    // 화상 / 독 (★몬스터 특성): 0.5초마다, 무적 무시
+    if (p.burnT > 0 || p.psnT > 0) {
+      p.burnT -= dt; p.psnT -= dt;
+      if ((p.dotT -= dt) <= 0) {
+        p.dotT = 0.5;
+        const v = ((p.burnT > 0 ? p.burnD : 0) + (p.psnT > 0 ? p.psnD * p.psnS : 0)) * 0.5 * (1 - T.dr);
+        if (v > 0) loseHP(v, p.burnT > 0 ? '#ff9a40' : '#9aff5a');
+        if (p.st === 'dead') return;
+      }
+    }
     if (p.st === 'hurt') { p.t += dt; p.vx *= 0.92; if (p.t > 0.25) p.st = 'n'; }
     else { p.vx = d * sp; if (d && p.st === 'n') p.face = d; }
     // 꾹 누르고 있으면 연속 공격
@@ -111,7 +121,7 @@ function updProjectiles(dt) {
     const od = o.d || 14 + depth() * 1.3, orr = o.r || (o.ar ? 5 : 8);
     if (p.inv <= 0 && p.st !== 'dead' && (o.gw ? Math.abs(o.x - p.x) < 28 && p.y > GY - 46 : Math.hypot(o.x - p.x, o.y - p.y + 45) < orr + 18)) {
       if (!o.gw) o.life = 0;
-      hurtP(od);
+      hurtP(od, o.src);
     }
     if (o.life > 0)
       for (const a of al)
