@@ -15,6 +15,7 @@ const shuffle = (arr) => arr.map((v) => [R(), v]).sort((a, b) => a[0] - b[0]).ma
 let state = 'title'; // title | play | pause | lvfx | lvl | relic | shop | over
 let time = 0, shake = 0, ban = null, spt = 0, bossT = 0, winT = 0;
 let S, T, p, lvl, xp, need, upc, opts;  // S: 레벨업 스탯, T: 장비·유물까지 합친 최종 스탯
+let stk = {}, gems = []; // stk: 성장형 장비 누적치 (아이템 id별), gems: 모은 보석
 let gold, inv, eq, relics, stock, relicOpts, lockd = [], rerollN = 0, upg = {}, accN = ACC_BASE;
 let cur = { w: 0, s: 0 }, kills = 0, portal = null, boss = null, bdone = 0, cam = 0, camY = 0, pl = [], map = null;
 let chests = [], clearMsg = '';
@@ -45,7 +46,10 @@ const CD_KEYS = ['cdr', 'scd'];
 const INT_UP = ['multi', 'sn', 'smax', 'chain', 'mj', 'freeroll'];
 const NO_SCALE = ['revive', 'vac', 'frzA', 'chest', 'gdup', 'bounty', 'freeroll', 'combo', 'slam', 'dash', 'slv'];
 function modsOf(id) {
-  const base = ITEM[id].m, L = upg[id] || 0, m = {};
+  const it = ITEM[id], L = upg[id] || 0, m = {};
+  // 성장형: 기본 효과 + 누적 효과 (강화 배율은 둘 다 적용)
+  const base = { ...it.m };
+  if (it.dyn) for (const [k, v] of Object.entries(it.dyn(stk[id]))) base[k] = (base[k] || 0) + v;
   for (const k in base) {
     const v = base[k];
     if (INT_UP.includes(k)) m[k] = v + (v > 0 ? Math.floor(L / 3) : 0);
@@ -54,9 +58,12 @@ function modsOf(id) {
   }
   return m;
 }
-const itemName = (id) => ITEM[id].n + (upg[id] ? ` +${upg[id]}` : '');
+const baseName = (it) => it.n + (it.id === 'souljar' && (stk.souljar || 0) >= SOUL_MAX ? ' (각성)' : '');
+const itemName = (id) => baseName(ITEM[id]) + (upg[id] ? ` +${upg[id]}` : '');
+const worn = (id) => { for (const s in eq) if (eq[s] === id) return true; return false; };
+const gemAll = () => gems.length >= GEMS.length; // 보석 4개 → 무기·갑옷·장신구 칸 +1
 const eqSlotNames = () => {
-  const o = { wpn: '무기', arm: '갑옷' };
+  const o = gemAll() ? { wpn: '무기 1', wpn2: '무기 2', arm: '갑옷 1', arm2: '갑옷 2' } : { wpn: '무기', arm: '갑옷' };
   for (let i = 1; i <= accN; i++) o['acc' + i] = '장신구 ' + i;
   return o;
 };
@@ -65,6 +72,7 @@ function activeMods() {
   const list = [];
   for (const s in eq) if (eq[s]) list.push(modsOf(eq[s]));
   for (const r of relics) list.push(RELIC[r].m);
+  for (const x of gems) list.push(GEM[x].m);
   return list;
 }
 
@@ -76,11 +84,14 @@ function recalc() {
         combo: 0, slam: 0, dash: 0, swkill: 0, swdrop: 0, ...S };
   const add = {};
   for (const m of activeMods()) for (const k in m) add[k] = (add[k] || 0) + m[k];
+  T.atk += add.atkf || 0; // 고정 공격력은 % 증가보다 먼저
   for (const k in add) {
     if (PCT_KEYS.includes(k)) T[k] *= 1 + add[k];
     else if (CD_KEYS.includes(k)) T[k] *= Math.max(0.3, 1 - add[k]);
     else T[k] = (T[k] || 0) + add[k];
   }
+  // 살덩이 갑옷: 최대 HP 100마다 받는 피해 감소
+  if (T.flesh) T.dr += Math.min(0.4, Math.floor(T.maxhp / 100) * T.flesh);
   T.dr = Math.min(0.7, T.dr);
   T.crit = Math.min(0.8, T.crit);
   T.frz = Math.min(0.75, T.frz);
@@ -97,7 +108,7 @@ function newRun() {
         sn: 3, smax: 10, slv: 0, scd: 1, sm: 1, swd: 1, swr: 1 };
   sTier = 0;
   lvl = 1; xp = 0; need = 6; upc = {};
-  gold = 0; inv = []; relics = []; stock = []; lockd = []; upg = {}; accN = ACC_BASE;
+  gold = 0; inv = []; relics = []; stk = {}; gems = []; stock = []; lockd = []; upg = {}; accN = ACC_BASE;
   eq = { wpn: null, arm: null };
   for (let i = 1; i <= accN; i++) eq['acc' + i] = null;
   al = [];
@@ -151,7 +162,7 @@ function openPortal(msg) {
 // 포털에 들어가면: 보스 스테이지였으면 유물 선택 → 정비(상점), 아니면 바로 정비
 function enter() {
   if (!portal || Math.abs(p.x - portal.x) >= 60 || Math.abs(p.y - portal.y) > 80) return;
-  p.hp = Math.min(T.maxhp, p.hp + T.maxhp * 0.3);
+  heal(T.maxhp * 0.3);
   mb = {};
   stageClear();
   if (isBossStage()) relicMenu();

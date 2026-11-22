@@ -21,13 +21,14 @@ function loadIcon(k) {
   const im = new Image(); im.src = iconSrc(k); ICON[k] = im; return im;
 }
 [...Object.values(EMO), 'ui_gold', 'ui_next', 'bf_atk', 'bf_spd', 'bf_haste', 'bf_guard',
-  ...ITEMS.map((i) => `${i.slot}_${i.id}`), ...RELICS.map((r) => `relic_${r.id}`)].forEach(loadIcon);
+  ...ITEMS.map((i) => `${i.slot}_${i.id}`), ...RELICS.map((r) => `relic_${r.id}`), ...GEMS.map((x) => `gem_${x.id}`)].forEach(loadIcon);
 
 const itemIcon = (it) => `${it.slot}_${it.id}`;
 const relicIcon = (r) => `relic_${r.id}`;
 
 // ----- HTML -----
-const icImg = (k, cls = 'ic') => `<img class="${cls}" src="${iconSrc(k)}" alt="">`;
+// 아이콘 파일이 아직 없으면 빈 칸으로 (깨진 이미지 표시 안 함)
+const icImg = (k, cls = 'ic') => `<img class="${cls}" src="${iconSrc(k)}" alt="" onerror="this.style.visibility='hidden'">`;
 const emo = (h) => h.replace(EMO_RE, (m, c) => icImg(EMO[c]));
 
 // ----- 캔버스 -----

@@ -54,6 +54,7 @@ function bossDown(e) {
   for (const o of en) if (o !== e) o.dead = 1;
   dropXP(e.x, e.y - 80, 12 * (8 + cur.w * 6), true);
   dropGold(e.x, e.y - 80, [200, 400][cur.w] || 400, true);
+  dropGem(e.x, e.y - 80); // 보스는 보석 확정
   shake = 0.8;
   if (cur.w === WORLDS.length - 1) { ban = { s: '최종 보스 격파!', t: 3 }; winT = 2.5; }
   else openPortal('보스 격파! 포털에 들어가 보상을 받으세요');

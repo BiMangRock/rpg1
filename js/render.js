@@ -524,6 +524,16 @@ function draw() {
       }
       continue;
     }
+    if (d.k === 'gm' || d.k === 'rl') {
+      // 보석: 보석 색으로 빛나는 마름모 / 유물: 분홍빛
+      const c = d.k === 'gm' ? GEM[d.id].c : '#ff8aa8', y = d.y - 6 + Math.sin(time * 4 + d.x) * 3;
+      g.save(); g.globalCompositeOperation = 'lighter'; glow(x, y, 40, hexRgb(c), 0.8 + 0.2 * Math.sin(time * 6)); g.restore();
+      if (!drawIcon(d.k === 'gm' ? 'gem_' + d.id : relicIcon(RELIC[d.id]), x, y, 30)) {
+        g.fillStyle = c; g.beginPath(); g.moveTo(x, y - 13); g.lineTo(x + 10, y); g.lineTo(x, y + 13); g.lineTo(x - 10, y); g.fill();
+        g.fillStyle = '#ffffffaa'; g.beginPath(); g.moveTo(x, y - 9); g.lineTo(x + 4, y - 2); g.lineTo(x - 4, y - 2); g.fill();
+      }
+      continue;
+    }
     if (d.k === 'g') {
       g.fillStyle = '#8a5a10'; g.beginPath(); g.arc(x, d.y, 6, 0, 7); g.fill();
       g.fillStyle = '#ffd24a'; g.beginPath(); g.ellipse(x, d.y, 5 * Math.abs(Math.cos(time * 5 + d.x)) + 1, 5, 0, 0, 7); g.fill();
@@ -653,6 +663,7 @@ function hud() {
   if (p.slowT > 0) sts.push(['❄ 둔화', '#9ad8ff']);
   if (p.burnT > 0) sts.push(['🔥 화상', '#ff9a40']);
   if (p.psnT > 0) sts.push([`☠ 독 ${p.psnS}`, '#9aff5a']);
+  if (stk.slaughter && worn('slaughter')) sts.push([`연쇄 ${stk.slaughter}`, '#ffb070']);
   sts.forEach(([t, c], i) => { g.fillStyle = c; richText(t, 244 + i * 70, 27); });
   g.fillStyle = '#fff';
   let bx = 16;
@@ -664,7 +675,9 @@ function hud() {
   g.textAlign = 'right'; g.font = '20px "Do Hyeon",sans-serif'; g.fillStyle = '#ffd24a';
   g.fillText(`${gold} G`, W - 16, 30);
   drawIcon('ui_gold', W - 30 - g.measureText(`${gold} G`).width, 23, 26);
-  if (relics.length) { g.font = '14px "Do Hyeon",sans-serif'; g.fillStyle = '#c88aff'; g.fillText(`유물 ${relics.length}개`, W - 16, 50); }
+  g.font = '14px "Do Hyeon",sans-serif';
+  const rg2 = [relics.length ? `유물 ${relics.length}개` : '', gems.length ? `보석 ${gems.length}/${GEMS.length}` : ''].filter(Boolean).join(' · ');
+  if (rg2) { g.fillStyle = gemAll() ? '#ffd24a' : '#c88aff'; g.fillText(rg2, W - 16, 50); }
   g.textAlign = 'left';
   if (!boss) minimap();
   if (boss) {

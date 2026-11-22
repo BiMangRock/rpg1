@@ -4,7 +4,13 @@
 const asm = () => T.as * (p.b.haste ? 1.5 : 1);
 const dm = () => T.atk * (p.b.atk ? 1.6 : 1);
 const rollCrit = () => R() < T.crit;
-const heal = (v) => { p.hp = Math.min(T.maxhp, p.hp + v); };
+function heal(v) {
+  v *= 1 + (T.healm || 0); // 희망의 보석
+  const over = p.hp + v - T.maxhp;
+  // 흡혈귀의 성배: 넘친 회복량의 10%가 최대 HP로
+  if (over > 0 && worn('vgrail')) { stk.vgrail = (stk.vgrail || 0) + over * 0.1; recalc(); }
+  p.hp = Math.min(T.maxhp, p.hp + v);
+}
 
 function txt(x, y, s, c) { tx.push({ x, y, s, c, t: 0.9 }); }
 function wave(x, y, c, r) { wv.push({ x, y, c, r: r || 120, t: 0 }); }
@@ -175,6 +181,10 @@ function hit(e, d, k = 0, crit, src) {
     else { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
   }
   if (e.evT > 0 && src === 'mg') return 0; // 검은 회피를 무시
+  if (T.gfist && (blade || src === 'mg')) d += T.maxhp * T.gfist;     // 거인의 주먹
+  if (T.lowx && e.hp < e.mh * 0.3) d *= 1 + T.lowx;                   // 절망의 보석
+  const cx = worn('codex') && stk.codex?.[e.t];                        // 마왕의 도감
+  if (cx) d *= 1 + Math.min(0.5, cx * 0.01);
   if (crit) d *= 2 + T.critx;
   if (e.dr) d *= 1 - e.dr;
   if (e.frz > 0 && T.frzB) d *= 1 + T.frzB;
@@ -210,6 +220,7 @@ function hit(e, d, k = 0, crit, src) {
 function kill(e, src) {
   esDie(e);
   fx.push({ a: [FR.exp[1], FR.exp[2], FR.exp[3]], x: e.x, y: e.y - e.h / 2, d: 0.08, sz: e.w * 1.6, f: 1, t: 0 });
+  onKill(e);
   if (e.t === 'boss') return bossDown(e);
   if (T.ls) heal(T.ls);
   if (!e.D.minion && e.D.ai !== 'crystal') kills++;
@@ -227,6 +238,7 @@ function kill(e, src) {
   if (st >= 5 && R() < 0.5) dropItem(e.x + 20, cy, 1);
   // 닌자 등 보상형 적: 별이 없어도 장비를 떨어뜨릴 수 있음
   if (e.D.item && R() < e.D.item * (1 + T.luck * 0.8) * (blade ? 1 + T.swdrop : 1)) dropItem(e.x - 20, cy, 0);
+  if (R() < GEM_DROP[st]) dropGem(e.x, cy);
   if (st >= 5 && R() < STAR_RELIC * (1 + T.luck * 0.5)) {
     const r = RELICS.filter((r) => !relics.includes(r.id));
     if (r.length) dr.push({ k: 'rl', id: pickR(r).id, x: e.x, y: cy, vy: -500, life: 1e9 });
@@ -244,6 +256,57 @@ function kill(e, src) {
       const c = spawn(e.t, cl(e.x + d * 24, 20, WW - 20), { y: e.y, nostar: 1 });
       c.hp = c.mh = c.mh * 0.6; c.kx = d * 200;
     }
+}
+
+// ----- 성장형 장비: 처치 시 누적 -----
+const stkAdd = (id, n = 1) => (stk[id] = (stk[id] || 0) + n);
+function growStat(id, v) {
+  const k = pickR(Object.keys(GROW_STATS)), o = id === 'idol' ? (stk.idol.m = stk.idol.m || {}) : (stk[id] = stk[id] || {});
+  o[k] = (o[k] || 0) + v;
+  return `${GROW_STATS[k]} +${Math.round(v * 100)}%`;
+}
+function onKill(e) {
+  if (e.D.minion || e.D.ai === 'crystal') return;
+  const msg = [], full = p.hp >= T.maxhp - 0.01; // 처치 회복 전에 확인
+  if (worn('predheart')) { stkAdd('predheart'); msg.push('최대 HP +1'); }
+  if (worn('pride') && full) { stkAdd('pride', 2); msg.push('오만 +2'); }
+  if (worn('bloodsw')) { stkAdd('bloodsw'); msg.push('공격력 +0.2'); }
+  if (worn('reaper') && (stk.reaper || 0) < 500) {
+    stkAdd('reaper');
+    if (stk.reaper % 100 === 0) { msg.push('사신의 장부 — 마법구체 +1!'); wave(p.x, p.y - 50, '#c8a0ff', 200); }
+  }
+  if (worn('trophy') && (e.star || e.t === 'boss')) msg.push('트로피: ' + growStat('trophy', 0.05));
+  if (worn('slaughter') && (stk.slaughter || 0) < 50) stkAdd('slaughter');
+  if (worn('souljar') && (stk.souljar || 0) < SOUL_MAX) {
+    stkAdd('souljar');
+    if (stk.souljar === SOUL_MAX) { msg.push('영혼 항아리 각성!'); shake = 0.5; wave(p.x, p.y - 50, '#8affff', 320); }
+  }
+  if (worn('codex') && CODEX_TYPES.includes(e.t)) {
+    const c = (stk.codex = stk.codex || {});
+    c[e.t] = (c[e.t] || 0) + 1;
+    if (c[e.t] === CODEX_MAX) msg.push(`도감 완성: ${ENEMY_NAME[e.t]}`);
+  }
+  if (msg.length || worn('slaughter') || worn('souljar') || worn('codex')) recalc();
+  if (msg.length) txt(p.x, p.y - 145, msg.join(' · '), '#ff8aa8');
+}
+
+// ----- 보석 -----
+function dropGem(x, y) {
+  const left = GEMS.filter((x2) => !gems.includes(x2.id) && !dr.some((d) => d.k === 'gm' && d.id === x2.id));
+  if (left.length) dr.push({ k: 'gm', id: pickR(left).id, x, y, vy: -520, life: 1e9 });
+}
+function gainGem(id) {
+  if (gems.includes(id)) { gold += 100; return; }
+  gems.push(id);
+  if (gemAll()) {
+    // 4개 모두 → 무기·갑옷·장신구 칸 +1
+    eq.wpn2 = null; eq.arm2 = null; accN++; eq['acc' + accN] = null;
+    ban = { s: '보석 4개를 모두 모았다! 무기·갑옷·장신구 칸 +1', t: 3.5 };
+    shake = 0.6; wave(p.x, p.y - 50, '#ffffff', 420);
+  }
+  recalc();
+  txt(p.x, p.y - 130, `보석 획득! ${GEM[id].n} (${gems.length}/${GEMS.length})`, GEM[id].c);
+  wave(p.x, p.y - 50, GEM[id].c, 220);
 }
 
 // 아직 없는 장비 중 하나 (bonus: 한 등급 위까지 허용)
@@ -268,6 +331,7 @@ function openChest(c) {
   dropGold(c.x, c.y - 30, (25 + depth() * 10) * mul, true);
   dropXP(c.x, c.y - 30, (3 + depth()) * 3, true);
   if (R() < 0.35 * mul) dropItem(c.x, c.y - 30, 0);
+  if (R() < GEM_CHEST * mul) dropGem(c.x, c.y - 30);
 }
 
 // 골드·경험치는 양에 비례한 개수로 사방에 쏟아짐 (최대 50개)
@@ -298,6 +362,7 @@ function hurtP(d, src, el) {
   if (A?.has('crit') && R() < 0.3) { d *= 2; txt(p.x, p.y - 118, '치명타!', '#ff4a4a'); }
   d *= (p.b.guard ? 0.4 : 1) * (1 - T.dr);
   p.inv = 1;
+  onHurt(d);
   shake = 0.25;
   if (T.frzA && p.frzCd <= 0) {
     // 서리 갑주: 주변 적 빙결
@@ -315,6 +380,19 @@ function hurtP(d, src, el) {
   p.combo = 0;
   if (!loseHP(d, '#ff4a6a')) return;
   p.st = 'hurt'; p.t = 0; p.vy = -250; p.vx = -p.face * 160;
+}
+
+// 피격 시 성장형 장비·보석
+function onHurt(d) {
+  let ch = 0;
+  if (worn('scars') && (stk.scars || 0) < 60) { stkAdd('scars'); ch = 1; }
+  if (worn('slaughter') && stk.slaughter > 1) { stk.slaughter = Math.floor(stk.slaughter / 2); ch = 1; txt(p.x, p.y - 150, '연쇄 끊김', '#ffb070'); }
+  if (ch) recalc();
+  if (T.frust) {
+    // 좌절의 보석: 주변 적에게 폭발 반격
+    wave(p.x, p.y - 50, '#7affc0', 200);
+    for (const e of en) if (!e.dead && Math.abs(e.x - p.x) < 200 && Math.abs(e.y - e.h / 2 - (p.y - 50)) < 170) hit(e, d * T.frust, 0, false, 'kb');
+  }
 }
 
 // HP 감소 (무적 무시). 쓰러지면 false
@@ -445,6 +523,7 @@ function jump() {
 function pickRaw(d) {
   if (d.k === 'xp') xp += d.v * T.xpm;
   else if (d.k === 'g') gold = Math.round(gold + d.v * (1 + T.gdup));
+  else if (d.k === 'gm') gainGem(d.id);
   else if (d.k === 'rl') {
     if (relics.includes(d.id)) { gold += 80; return; }
     relics.push(d.id); recalc();
