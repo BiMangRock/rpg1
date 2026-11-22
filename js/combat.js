@@ -272,9 +272,11 @@ function openChest(c) {
 
 // 골드·경험치는 양에 비례한 개수로 사방에 쏟아짐 (최대 50개)
 function spray(k, x, y, v, spread) {
-  const n = cl(Math.ceil(v / (k === 'g' ? 3 : 2)), 1, 50), base = v / n, sp = spread ? 1 + Math.min(2, n / 12) : 0.5;
+  const n = cl(Math.ceil(v / (k === 'g' ? 3 : 2)), 1, 50), sp = spread ? 1 + Math.min(2, n / 12) : 0.5;
+  // 골드는 정수로 나눔 (나머지는 앞쪽 금화에 1씩) — 소수점 골드 방지
+  const gi = k === 'g', base = gi ? Math.floor(v / n) : v / n, rem = gi ? Math.round(v - base * n) : 0;
   for (let i = 0; i < n; i++)
-    dr.push({ k, v: base, x: x + rr(-8, 8), y, vx: rr(-170, 170) * sp, vy: rr(-380, -180) * (spread ? 1.5 : 1), life: 1e9 });
+    dr.push({ k, v: base + (i < rem ? 1 : 0), x: x + rr(-8, 8), y, vx: rr(-170, 170) * sp, vy: rr(-380, -180) * (spread ? 1.5 : 1), life: 1e9 });
 }
 function dropGold(x, y, v, spread) {
   v = Math.max(1, Math.round(v * rr(0.8, 1.25) * T.gold));
@@ -442,7 +444,7 @@ function jump() {
 // 실제 획득 (정산 화면에서도 사용, 레벨업 연출 없이)
 function pickRaw(d) {
   if (d.k === 'xp') xp += d.v * T.xpm;
-  else if (d.k === 'g') gold += d.v * (1 + T.gdup);
+  else if (d.k === 'g') gold = Math.round(gold + d.v * (1 + T.gdup));
   else if (d.k === 'rl') {
     if (relics.includes(d.id)) { gold += 80; return; }
     relics.push(d.id); recalc();
