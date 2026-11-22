@@ -82,6 +82,12 @@ function updEnemies(dt) {
       if (e.dead) continue;
     }
     if (e.t !== 'boss' && !e.D.fly && e.D.ai !== 'crystal') body(e, dt);
+    // 기절 (3연타 마지막 타격)
+    if (e.stn > 0) {
+      e.stn -= dt;
+      e.x += e.kx * dt; e.kx *= Math.pow(0.02, dt);
+      continue;
+    }
     // 빙결: 아무것도 못 함
     if (e.frz > 0) {
       e.frz -= dt;
@@ -213,31 +219,49 @@ function support(e) {
 // ----- 소환수 AI -----
 function updSummons(dt) {
   for (const a of al) {
-    a.ph += dt * 3; a.cd -= dt; a.iv -= dt; a.fl -= dt;
+    const D = a.d;
+    a.ph += dt * 3; a.cd -= dt; a.iv -= dt; a.fl -= dt; a.st -= dt;
     // 너무 멀어지면 마왕 곁으로 순간이동
     if (Math.hypot(a.x - p.x, a.y - p.y) > 750) {
-      a.x = cl(p.x + a.o, 20, WW - 20); a.y = a.t === 'bat' ? p.y - 80 : p.y; a.vy = 0;
+      a.x = cl(p.x + a.o, 20, WW - 20); a.y = a.air ? p.y - 80 : p.y; a.vy = 0;
       fx.push({ a: [FR.exp[1], FR.exp[2]], x: a.x, y: a.y - 16, d: 0.06, sz: 60, f: 1, t: 0 });
     }
-    // 목표: 가까운 적 (슬라임은 날아다니는 적과 너무 높은 곳의 적은 무시)
+    // 목표: 가까운 적 (지상형은 날아다니는 적과 너무 높은 곳의 적은 무시)
     let tg = null, bd = 450;
     for (const e of en) {
-      if (e.dead || (a.t === 'slime' && (e.D.fly || e.y < a.y - 260))) continue;
+      if (e.dead || (!a.air && (e.D.fly || e.y < a.y - 260))) continue;
       const d = Math.abs(e.x - a.x) + Math.abs(e.y - a.y) * 0.8;
       if (d < bd) { bd = d; tg = e; }
     }
     const tx = tg ? tg.x : p.x + a.o;
-    // 슬라임: 발판을 뛰어오르내리며 따라옴
-    if (a.t === 'slime') chaseJump(a, dt, tx, tg ? tg.y : p.y, 900);
+    if (!a.air) chaseJump(a, dt, tx, tg ? tg.y : p.y, 900);
     const dx = (a.jx != null ? a.jx : tx) - a.x;
     a.dir = dx > 0 ? 1 : -1;
-    if (tg || a.jx != null || Math.abs(dx) > 60) a.x += a.dir * Math.min(a.sp * dt, Math.abs(dx));
+    // 원거리형은 일정 거리에서 멈추고 쏨
+    const keep = D.shot && tg ? 160 : 0;
+    if ((tg || a.jx != null || Math.abs(dx) > 60) && Math.abs(dx) > keep) a.x += a.dir * Math.min(a.sp * dt, Math.abs(dx));
     a.x = cl(a.x, 20, WW - 20);
-    if (a.t === 'bat') a.y += ((tg ? tg.y - tg.h / 2 : p.y - 90) + Math.sin(a.ph) * 12 - a.y) * dt * 3;
+    if (a.air) a.y += ((tg ? tg.y - tg.h / 2 - (D.shot ? 70 : 0) : p.y - 90) + Math.sin(a.ph) * 12 - a.y) * dt * 3;
     else body(a, dt);
+    const dmgA = dm() * T.sm * D.dm;
+    // 원거리 발사 (가고일·와이번·흑룡)
+    if (D.shot && tg && a.st <= 0 && Math.hypot(tg.x - a.x, tg.y - a.y) < 460) {
+      a.st = 1.4;
+      const ang = Math.atan2(tg.y - tg.h / 2 - (a.y - a.h / 2), tg.x - a.x);
+      for (let i = 0; i < D.shot; i++) {
+        const o = (i - (D.shot - 1) / 2) * 0.15;
+        pr.push({ ab: 1, x: a.x, y: a.y - a.h / 2, vx: Math.cos(ang + o) * 520, vy: Math.sin(ang + o) * 520, life: 1.2, a: 0, dmg: dmgA * 0.6, r: 7, c: D.burn ? '#ff7a3a' : '#c08aff', burn: D.burn });
+      }
+    }
+    // 근접 공격 (aoe: 주변 적 모두)
     if (tg && a.cd <= 0 && Math.abs(tg.x - a.x) < (tg.w + a.w) / 2 + 4 && Math.abs(tg.y - tg.h / 2 - (a.y - a.h / 2)) < (tg.h + a.h) / 2) {
       a.cd = 0.5;
-      hit(tg, dm() * T.sm * (a.t === 'bat' ? 0.7 : 1), a.dir * 120, false, 'sm');
+      const list = D.aoe ? en.filter((e) => !e.dead && Math.hypot(e.x - a.x, e.y - a.y) < a.w + 50) : [tg];
+      if (D.aoe) wave(a.x, a.y - a.h / 2, '#c08aff', a.w + 50);
+      for (const e of list) {
+        hit(e, dmgA, a.dir * 120, false, 'sm');
+        if (D.burn && !e.dead) { e.burnT = 3; e.burnD = dmgA * 0.3; }
+      }
     }
   }
   al = al.filter((a) => a.life > 0);

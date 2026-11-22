@@ -52,12 +52,26 @@ function spawn(type, x, opt) {
 }
 
 // ----- 플레이어 공격 -----
+// 검: 회피·보호막 무시, 적 탄환 튕겨내기, 얼린 적 분쇄 (+ 장비로 콤보)
 function melee() {
-  const x = p.x + p.face * 50;
-  fx.push({ a: FR.slash, x: p.x + p.face * 55, y: p.y - 58, d: 0.06, sz: 150, hh: 120, f: -p.face, t: 0 });
+  let big = false, cm = 1;
+  if (T.combo) {
+    p.combo = Math.min(10, p.combo + 1); p.comboT = 1.3;
+    big = p.combo % 3 === 0;                    // 3번째 타격
+    cm = 1 + Math.min(1, (p.combo - 1) * 0.1); // 콤보마다 +10%
+  }
+  const rng = T.swr * (big ? 1.6 : 1), x = p.x + p.face * 50 * rng;
+  fx.push({ a: FR.slash, x: p.x + p.face * 55 * rng, y: p.y - 58, d: 0.06, sz: 150, hh: 120 * rng, f: -p.face, t: 0 });
+  if (big) { shake = Math.max(shake, 0.25); wave(x, p.y - 55, '#ffd24a', 110 * rng); }
   let dealt = 0;
   for (const e of en)
-    if (!e.dead && Math.abs(e.x - x) < 75 + e.w / 2 && e.y > p.y - 130 && e.y - e.h < p.y && !evade(e, 'sw')) dealt += hit(e, dm(), p.face * 260, rollCrit(), 'sw');
+    if (!e.dead && Math.abs(e.x - x) < 75 * rng + e.w / 2 && e.y > p.y - 130 * rng && e.y - e.h < p.y + 10) {
+      const fz = e.frz > 0;
+      dealt += hit(e, dm() * T.swd * cm * (big ? 1.5 : 1), p.face * (big ? 650 : 260), rollCrit(), 'sw');
+      if (fz) shatter(e);
+      if (big && !e.dead && e.t !== 'boss' && e.D.ai !== 'crystal') e.stn = 1; // 기절
+    }
+  parry(x);
   if (T.vamp && dealt > 0) heal(dealt * T.vamp);
   // 검기: 적을 관통하며 날아감
   if (T.swave) pr.push({ sw: 1, x: p.x + p.face * 40, y: p.y - 60, vx: p.face * 760, vy: 0, life: 0.5, a: 0, f: p.face, dmg: dm() * T.swave, crit: rollCrit(), hs: new Set() });
@@ -81,6 +95,30 @@ function boom(x, y, d, crit, direct) {
   for (const e of en)
     if (Math.hypot(e.x - x, e.y - e.h / 2 - y) < r + e.w / 2 && (e === direct || !evade(e, 'pr'))) hit(e, d, (e.x > x ? 1 : -1) * 200, crit, 'mg');
   if (T.chain) chainBolt(x, y, d * 0.6, T.chain);
+}
+
+// 탄 튕겨내기: 검 범위 안의 적 탄환을 베면 반대로 날려 보냄 (쏜 적을 향해)
+function parry(x) {
+  let n = 0;
+  for (const o of eb) {
+    if (o.gw || o.life <= 0 || Math.abs(o.x - x) > 100 * T.swr || o.y < p.y - 160 || o.y > p.y + 10) continue;
+    o.life = 0; n++;
+    const s = o.src && !o.src.dead ? o.src : null;
+    const ang = s ? Math.atan2(s.y - s.h / 2 - o.y, s.x - o.x) : p.face > 0 ? 0 : Math.PI;
+    pr.push({ rf: 1, x: o.x, y: o.y, vx: Math.cos(ang) * 720, vy: Math.sin(ang) * 720, life: 1.4, a: 0, dmg: dm() * T.swd * 2 + (o.d || 15) * 1.5, c: '#ffe680', r: (o.r || 6) + 2 });
+  }
+  if (n) { txt(p.x, p.y - 125, n > 1 ? `튕겨내기 ×${n}!` : '튕겨내기!', '#ffe680'); fx.push({ a: [FR.flash[0]], x, y: p.y - 60, d: 0.1, sz: 110, f: 1, t: 0 }); }
+}
+
+// 빙결 분쇄: 얼어 있던 적을 베면 산산조각 → 본인 추가 피해 + 주변 범위 피해
+function shatter(e) {
+  e.frz = 0;
+  const cy = e.y - e.h / 2;
+  txt(e.x, e.y - e.h - 26, '분쇄!', '#bfeaff');
+  wave(e.x, cy, '#bfeaff', 140);
+  for (let i = 0; i < 14; i++) { const a = R() * 6.283, s = rr(120, 380); pt.push({ x: e.x, y: cy, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 120, t: rr(0.3, 0.7), c: R() < 0.5 ? '#bfeaff' : '#fff' }); }
+  if (!e.dead) hit(e, dm() * T.swd * 2, 0, false, 'sh');
+  for (const o of en) if (o !== e && !o.dead && Math.hypot(o.x - e.x, o.y - o.h / 2 - cy) < 130) hit(o, dm() * T.swd * 1.5, (o.x > e.x ? 1 : -1) * 250, false, 'sh');
 }
 
 // 연쇄 번개: 폭발 지점에서 가까운 적으로 차례로 튐
@@ -127,15 +165,20 @@ function freeze(e, t) {
 
 // ----- 적에게 피해 (실제로 깎인 HP 반환) -----
 // src: sw 검 / mg 마법 / sm 소환수 / ch 번개 / kb 처치폭발 / th 반격 / burn 화상 / psn 독
-const DMG_COL = { burn: '#ff9a40', psn: '#9aff5a', ch: '#bfe0ff', kb: '#ffb070' };
+const DMG_COL = { burn: '#ff9a40', psn: '#9aff5a', ch: '#bfe0ff', kb: '#ffb070', sh: '#bfeaff', rf: '#ffe680' };
 function hit(e, d, k = 0, crit, src) {
   if (e.dead) return 0;
-  if (e.inv > 0) { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
-  if (e.evT > 0 && (src === 'mg' || src === 'sw')) return 0;
+  const blade = src === 'sw' || src === 'sh';
+  if (e.inv > 0) {
+    // 검은 대주교의 성역을 뚫고 50% 피해
+    if (blade && e.sanct) d *= 0.5;
+    else { if (R() < 0.15) txt(e.x, e.y - e.h - 6, e.sanct ? '성역' : '무적', '#ffe08a'); return 0; }
+  }
+  if (e.evT > 0 && src === 'mg') return 0; // 검은 회피를 무시
   if (crit) d *= 2 + T.critx;
   if (e.dr) d *= 1 - e.dr;
   if (e.frz > 0 && T.frzB) d *= 1 + T.frzB;
-  if (e.shd > 0) {
+  if (e.shd > 0 && !blade) { // 검은 보호막을 무시
     const a = Math.min(e.shd, d);
     e.shd -= a; d -= a; e.fl = 0.08;
     if (R() < 0.3) txt(e.x, e.y - e.h - 22, '보호막', '#8ac8ff');
@@ -160,17 +203,18 @@ function hit(e, d, k = 0, crit, src) {
     txt(e.x, e.y - e.h - 30, '부활!', '#ff8aa8'); wave(e.x, e.y - e.h / 2, '#ff4a6a', 140);
     return d;
   }
-  if (e.hp <= 0) { e.dead = 1; kill(e); }
+  if (e.hp <= 0) { e.dead = 1; kill(e, src); }
   return d;
 }
 
-function kill(e) {
+function kill(e, src) {
   fx.push({ a: [FR.exp[1], FR.exp[2], FR.exp[3]], x: e.x, y: e.y - e.h / 2, d: 0.08, sz: e.w * 1.6, f: 1, t: 0 });
   if (e.t === 'boss') return bossDown(e);
   if (T.ls) heal(T.ls);
   if (!e.D.minion && e.D.ai !== 'crystal') kills++;
   // ★ 보상: 별 수의 제곱에 비례 (★5 = 경험치 13.5배, 골드 16배)
-  const st = e.star || 0, bn = (st && T.bounty ? 2 : 1) * STAR_BONUS[st], cy = e.y - e.h / 2;
+  const blade = src === 'sw' || src === 'sh';
+  const st = e.star || 0, bn = (st && T.bounty ? 2 : 1) * STAR_BONUS[st] * (blade ? 1 + T.swkill : 1), cy = e.y - e.h / 2;
   if (e.D.xp) dropXP(e.x, cy, e.D.xp * (1 + st * st * 0.5) * bn, st >= 2);
   if (st >= 4) { shake = Math.max(shake, 0.35); wave(e.x, cy, '#ffd24a', 220); }
   if (e.D.gold) dropGold(e.x, cy, (e.D.gold * (1 + st * st * 0.6) + T.gkill) * bn, st >= 2);
@@ -178,7 +222,7 @@ function kill(e) {
   if (T.kboom) kq.push({ x: e.x, y: cy });
   if (!e.D.minion && (st >= 3 || R() < 0.15)) dr.push({ k: 'b', b: pickR(Object.keys(BF)), x: e.x, y: cy, vy: -300, life: 12 });
   // ★ 몬스터는 장비를 떨어뜨릴 수 있음
-  if (st && R() < STAR_ITEM[st] * (1 + T.luck * 0.8)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
+  if (st && R() < STAR_ITEM[st] * (1 + T.luck * 0.8) * (blade ? 1 + T.swdrop : 1)) dropItem(e.x, cy, st >= 4 ? 1 : 0);
   if (st >= 5 && R() < 0.5) dropItem(e.x + 20, cy, 1);
   if (st >= 5 && R() < STAR_RELIC * (1 + T.luck * 0.5)) {
     const r = RELICS.filter((r) => !relics.includes(r.id));
@@ -258,6 +302,7 @@ function hurtP(d, src) {
     if (A.has('poison')) { p.psnS = Math.min(5, (p.psnT > 0 ? p.psnS : 0) + 1); p.psnT = 4; p.psnD = src.dmg * 0.1; }
     if (A.has('vamp') && !src.dead) { src.hp = Math.min(src.mh, src.hp + d * 1.5); txt(src.x, src.y - src.h - 10, '+' + Math.round(d * 1.5), '#ff8aa8'); }
   }
+  p.combo = 0;
   if (!loseHP(d, '#ff4a6a')) return;
   p.st = 'hurt'; p.t = 0; p.vy = -250; p.vx = -p.face * 160;
 }
@@ -294,16 +339,41 @@ function sumCast() {
 }
 
 // 시간이 지나도 사라지지 않음. 꽉 찼으면 새로 만들지 않고 기존 소환수 체력 회복.
+// 소환 레벨 = 1 + 소환 계열 레벨업 횟수 + 장비/유물. 3·5·7·9에서 진화
+const summonLv = () => 1 + Math.round(T.slv);
+function summonTier() {
+  const lv = summonLv();
+  let t = 0;
+  for (const n of SUMMON_LV) if (lv >= n) t++;
+  return t;
+}
+const sumDef = (air) => SUMMONS[sTier][air ? 1 : 0];
+const sumMh = (d) => d.hp * T.sm * (1 + depth() * 0.13);
+
+// 기존 소환수도 즉시 새 모습으로 (체력 비율 유지)
+function evolveSummons() {
+  for (const a of al) {
+    const d = sumDef(a.air), r = a.hp / a.mh;
+    Object.assign(a, { k: d.k, d, w: d.w, h: d.h, sp: d.sp });
+    a.mh = sumMh(d); a.hp = a.mh * r;
+    fx.push({ a: [FR.flash[1], FR.flash[2]], x: a.x, y: a.y - a.h / 2, d: 0.1, sz: 90, f: 1, t: 0 });
+  }
+  if (p && state !== 'title' && sTier > 0) {
+    ban = { s: `소환수 진화! ${sumDef(0).n} · ${sumDef(1).n}`, t: 3 };
+    wave(p.x, p.y - 50, '#c08aff', 300);
+  }
+}
+
+// 최대치(smax)가 꽉 찼으면 새로 만들지 않고 기존 소환수 체력 회복
 function summon() {
   p.sc = SCD * T.scd;
-  const sn = Math.round(T.sn), nw = Math.min(sn, MAXA - al.length);
+  const sn = Math.round(T.sn), max = Math.round(T.smax), nw = Math.max(0, Math.min(sn, max - al.length));
   if (nw < sn) { for (const a of al) a.hp = a.mh; txt(p.x, p.y - 135, '소환수 회복!', '#9aff9a'); }
   const b0 = al.length;
   for (let i = 0; i < nw; i++) {
-    const bat = (b0 + i) % 2, o = (i - (nw - 1) / 2) * 40, x = p.x + o * 1.2, y = bat ? p.y - 80 : p.y;
-    const mh = (bat ? 30 : 55) * T.sm * (1 + depth() * 0.13);
-    al.push({ t: bat ? 'bat' : 'slime', x, y, w: bat ? 36 : 40, h: bat ? 26 : 32, sp: bat ? 150 : 120, life: 1, ph: R() * 6,
-              dir: p.face, cd: 0, o, hp: mh, mh, iv: 0, fl: 0 });
+    const air = (b0 + i) % 2 === 1, d = sumDef(air), o = (i - (nw - 1) / 2) * 40, x = p.x + o * 1.2, y = air ? p.y - 80 : p.y;
+    const mh = sumMh(d);
+    al.push({ air, k: d.k, d, x, y, w: d.w, h: d.h, sp: d.sp, life: 1, ph: R() * 6, dir: p.face, cd: 0, st: rr(0.5, 1.5), o, hp: mh, mh, iv: 0, fl: 0 });
     fx.push({ a: [FR.exp[1], FR.exp[2]], x, y: y - 16, d: 0.08, sz: 80, f: 1, t: 0 });
   }
   al.forEach((a, i) => (a.o = (i - (al.length - 1) / 2) * 30));
@@ -315,7 +385,31 @@ function summon() {
 function atk(m) {
   if (p.st !== 'n') return;
   if (m && mon) p.face = msx + cam > p.x ? 1 : -1;
+  // 낙하의 장화: 공중에서 S+공격 → 내려찍기
+  if (T.slam && !p.g && keys[KB.dn]) { p.st = 'slam'; p.t = 0; p.vy = 1300; p.slamY = p.y; p.inv = Math.max(p.inv, 0.2); return; }
   p.st = 'atk'; p.t = 0; p.hit = 0;
+  // 질주의 검집: 달리면서 공격하면 돌진 베기
+  if (T.dash && p.g && Math.abs(p.vx) > 60 && p.dashCd <= 0) {
+    p.dashT = 0.2; p.dashCd = 0.9; p.dashHs = new Set(); p.inv = Math.max(p.inv, 0.35);
+    fx.push({ a: [FR.flash[0]], x: p.x, y: p.y - 40, d: 0.1, sz: 90, f: p.face, t: 0 });
+  }
+}
+
+// 내려찍기 착지: 떨어진 높이에 비례한 충격파
+function slamLand() {
+  const fall = Math.max(0, p.y - p.slamY), d = dm() * T.swd * (2.5 + Math.min(fall, 700) / 180);
+  p.st = 'n'; p.inv = Math.max(p.inv, 0.25);
+  shake = 0.5;
+  fx.push({ a: FR.exp, x: p.x, y: p.y - 20, d: 0.06, sz: 260, f: 1, t: 0 });
+  wave(p.x, p.y - 10, '#ffb070', 220);
+  for (const e of en)
+    if (!e.dead && Math.abs(e.x - p.x) < 170 + e.w / 2 && Math.abs(e.y - p.y) < 110) {
+      const fz = e.frz > 0;
+      hit(e, d, (e.x > p.x ? 1 : -1) * 350, rollCrit(), 'sw');
+      if (fz) shatter(e);
+      if (!e.dead && e.t !== 'boss' && e.D.ai !== 'crystal') { e.vy = -520; e.g = 0; }
+    }
+  txt(p.x, p.y - 120, '내려찍기!', '#ffb070');
 }
 
 function cast() {

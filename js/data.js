@@ -12,7 +12,21 @@ let MH = 540;   // 맵 세로 길이
 // ----- 기본 수치 -----
 const MAG_CD = 0.7; // 마법 기본 쿨타임(초)
 const SCD = 12;     // 소환 기본 쿨타임(초)
-const MAXA = 12;    // 소환수 최대 수
+// 소환수: 소환 레벨 3·5·7·9에서 진화. [지상, 공중]
+//  hp/dm(공격 배율)/sp/w/h, burn: 적중 시 화상, aoe: 주변 동시 공격, shot: 원거리 발사 수
+const SUMMON_LV = [3, 5, 7, 9];
+const SUMMONS = [
+  [{ k: 'slime',  n: '슬라임',     hp: 55,  dm: 1,   sp: 120, w: 40, h: 32 },
+   { k: 'bat',    n: '박쥐',       hp: 30,  dm: 0.7, sp: 150, w: 36, h: 26 }],
+  [{ k: 'skel',   n: '해골 병사',  hp: 90,  dm: 1.4, sp: 135, w: 34, h: 56 },
+   { k: 'crow',   n: '유령 까마귀', hp: 50, dm: 1,   sp: 180, w: 40, h: 26 }],
+  [{ k: 'hound',  n: '지옥견',     hp: 140, dm: 1.9, sp: 210, w: 54, h: 36, burn: 1 },
+   { k: 'garg',   n: '가고일',     hp: 95,  dm: 1.4, sp: 165, w: 50, h: 38, shot: 1 }],
+  [{ k: 'knight', n: '흑기사',     hp: 230, dm: 2.6, sp: 145, w: 44, h: 74, aoe: 1 },
+   { k: 'wyvern', n: '와이번',     hp: 140, dm: 1.9, sp: 185, w: 62, h: 40, shot: 2, burn: 1 }],
+  [{ k: 'golem',  n: '심연 골렘',  hp: 400, dm: 3.6, sp: 115, w: 72, h: 92, aoe: 1 },
+   { k: 'dragon', n: '흑룡',       hp: 250, dm: 2.6, sp: 175, w: 92, h: 56, shot: 3, burn: 1 }],
+];
 const POTION_PRICE = 40;
 const REROLL_PRICE = 20;  // 새로고침 비용 (같은 상점에서 누를 때마다 +10)
 const SHOP_SIZE = 5;      // 상점 진열 수
@@ -112,9 +126,15 @@ const UPGRADES = [
   { n: '경험치 획득 +25%', f: () => (S.xpm *= 1.25) },
   { n: '점프 +1단 (이단/삼단 점프)', f: () => S.mj++, max: 2 },
   { n: '아이템 자석 +50%', f: () => (S.mag *= 1.5) },
-  { n: '소환수 +1마리', f: () => S.sn++, max: 4 },
-  { n: '소환 쿨타임 -20%', f: () => (S.scd *= 0.8), max: 4 },
-  { n: '소환수 강화 +30%', f: () => (S.sm *= 1.3) },
+  // sum: 소환 계열 → 고르면 소환 레벨 +1 (3·5·7·9에서 진화)
+  { n: '한 번에 소환하는 수 +1', f: () => S.sn++, max: 4, sum: 1 },
+  { n: '최대 소환수 +3', f: () => (S.smax += 3), max: 5, sum: 1 },
+  { n: '소환 쿨타임 -20%', f: () => (S.scd *= 0.8), max: 4, sum: 1 },
+  { n: '소환수 강화 +30%', f: () => (S.sm *= 1.3), sum: 1 },
+  { n: '소환술 숙련 (소환 레벨 +1 추가)', f: () => S.slv++, sum: 1, w: 1.3 },
+  // 검 계열
+  { n: '검술: 검 피해 +30%', f: () => (S.swd *= 1.3), w: 1.3 },
+  { n: '넓은 베기: 검 범위 +20%', f: () => (S.swr *= 1.2), max: 3 },
 ];
 
 // ----- 장비 / 유물 효과 키 -----
@@ -123,6 +143,8 @@ const UPGRADES = [
 //  더하기:     maxhp multi ls mj sn crit vamp dr thorns revive
 //    crit: 치명타 확률 / critx: 치명타 배율 추가(기본 2배) / vamp: 검 피해 흡혈 비율
 //    dodge: 회피 확률 (피해 완전 무시)
+//    sn: 한 번에 소환하는 수 / smax: 최대 소환수 / slv: 소환 레벨 (3·5·7·9에서 진화)
+//    combo: 3연타 콤보 / slam: 공중 내려찍기 / dash: 돌진 베기 / swkill: 검 처치 시 보상 증가 / swdrop: 검 처치 시 장비 드롭 증가
 //    dr: 받는 피해 감소(음수면 증가) / thorns: 닿은 적에게 공격력×값 반격 / revive: 스테이지마다 부활 횟수
 //  특수 효과:
 //    frz: 검·마법 적중 시 빙결 확률 (보스는 둔화) / frzT: 빙결 시간 추가(초) / frzB: 빙결된 적에게 추가 피해
@@ -153,7 +175,10 @@ const ITEMS = [
   { id: 'thunder', slot: 'wpn', tier: 3, price: 320, n: '뇌신의 홀',      d: '마법 위력 +60%, 폭발 시 ⚡연쇄 번개가 주변 적 4명 타격', m: { mp: 0.6, chain: 4 } },
   { id: 'zero',    slot: 'wpn', tier: 3, price: 380, n: '절대영도',       d: '공격력 +50%, 빙결 확률 +35%, 빙결된 적에게 피해 +60%', m: { atk: 0.5, frz: 0.35, frzB: 0.6 } },
   { id: 'scythe',  slot: 'wpn', tier: 3, price: 400, n: '마왕의 대낫',    d: '공격력 +80%, 체력 20% 이하 일반 적 즉사, 처치 시 HP +5', m: { atk: 0.8, exe: 0.2, ls: 5 } },
-  { id: 'scepter', slot: 'wpn', tier: 3, price: 300, n: '군주의 홀',      d: '소환수 +3, 소환수 강화 +60%, 소환수 공격 15% 빙결', m: { sn: 3, sm: 0.6, sfrz: 0.15 } },
+  { id: 'scepter', slot: 'wpn', tier: 3, price: 300, n: '군주의 홀',      d: '한 번에 소환 +3, 최대 소환수 +4, 소환 레벨 +2, 소환수 강화 +60%, 소환수 공격 15% 빙결', m: { sn: 3, smax: 4, slv: 2, sm: 0.6, sfrz: 0.15 } },
+  // --- 검 특화 ---
+  { id: 'twin',    slot: 'wpn', tier: 2, price: 200, n: '연격의 쌍검',    d: '공격력 +20%, 3연타 콤보: 3번째 타격은 범위↑·넉백·기절, 콤보마다 검 피해 +10% (최대 +100%), 맞으면 초기화', m: { atk: 0.2, combo: 1 } },
+  { id: 'sage_sw', slot: 'wpn', tier: 3, price: 380, n: '검성의 태도',    d: '공격력 +60%, 3연타 콤보 + 돌진 베기, 검으로 처치 시 골드·경험치 +30%', m: { atk: 0.6, combo: 1, dash: 1, swkill: 0.3 } },
   // ===== 갑옷 =====
   { id: 'cloak',   slot: 'arm', tier: 1, price: 50,  n: '가죽 망토',      d: '최대 HP +40', m: { maxhp: 40 } },
   { id: 'windc',   slot: 'arm', tier: 1, price: 90,  n: '바람의 외투',    d: '이동 속도 +20%, 점프 +1단', m: { spd: 0.2, mj: 1 } },
@@ -174,7 +199,11 @@ const ITEMS = [
   { id: 'hermes',  slot: 'acc', tier: 3, price: 300, n: '헤르메스의 날개', d: '이동 속도 +40%, 점프 +2단, 회피 +15%', m: { spd: 0.4, mj: 2, dodge: 0.15 } },
   { id: 'frostrg', slot: 'acc', tier: 2, price: 150, n: '서리 반지',      d: '❄빙결 확률 +12%, 빙결 시간 +1초', m: { frz: 0.12, frzT: 1 } },
   { id: 'hourear', slot: 'acc', tier: 2, price: 170, n: '시간의 귀걸이',  d: '마법·소환 쿨타임 -30%', m: { cdr: 0.3, scd: 0.3 } },
-  { id: 'soul',    slot: 'acc', tier: 2, price: 170, n: '영혼의 부적',    d: '소환수 강화 +60%, 소환수 +1', m: { sm: 0.6, sn: 1 } },
+  { id: 'soul',    slot: 'acc', tier: 2, price: 170, n: '영혼의 부적',    d: '소환수 강화 +60%, 한 번에 소환 +1, 최대 소환수 +3, 소환 레벨 +1', m: { sm: 0.6, sn: 1, smax: 3, slv: 1 } },
+  { id: 'oath',    slot: 'acc', tier: 1, price: 80,  n: '피의 맹세',      d: '검 피해의 10% 흡혈', m: { vamp: 0.1 } },
+  { id: 'boots2',  slot: 'acc', tier: 2, price: 150, n: '낙하의 장화',    d: '공중에서 S+공격 → 내려찍기 (떨어진 높이만큼 강한 충격파)', m: { slam: 1 } },
+  { id: 'sheath',  slot: 'acc', tier: 2, price: 160, n: '질주의 검집',    d: '달리면서 공격하면 앞으로 돌진하며 관통 베기 + 짧은 무적, 이동 속도 +10%', m: { dash: 1, spd: 0.1 } },
+  { id: 'mark',    slot: 'acc', tier: 2, price: 170, n: '검귀의 증표',    d: '검으로 처치하면 골드·경험치 +30%, 장비 드롭 확률 +50%', m: { swkill: 0.3, swdrop: 0.5 } },
   { id: 'storm',   slot: 'acc', tier: 2, price: 190, n: '폭풍의 인장',    d: '공격 속도 +30%, 폭발 범위 +35%', m: { as: 0.3, area: 0.35 } },
   { id: 'corpse',  slot: 'acc', tier: 2, price: 200, n: '시체 폭발 부적', d: '적 처치 시 💥폭발 (공격력 250% 범위 피해)', m: { kboom: 2.5 } },
   // --- 경제·유틸 장신구 ---
@@ -197,7 +226,7 @@ const RELICS = [
   { id: 'grail',  n: '피의 성배',       d: '최대 HP +50, 처치 시 HP +3', m: { maxhp: 50, ls: 3 } },
   { id: 'horn',   n: '마왕의 뿔',       d: '공격력 +40%', m: { atk: 0.4 } },
   { id: 'glass',  n: '시간의 모래시계', d: '마법·소환 쿨타임 -30%', m: { cdr: 0.3, scd: 0.3 } },
-  { id: 'banner', n: '군주의 깃발',     d: '소환수 +2, 소환수 강화 +50%', m: { sn: 2, sm: 0.5 } },
+  { id: 'banner', n: '군주의 깃발',     d: '한 번에 소환 +2, 최대 소환수 +3, 소환 레벨 +1, 소환수 강화 +50%', m: { sn: 2, smax: 3, slv: 1, sm: 0.5 } },
   { id: 'prism',  n: '분열의 수정',     d: '마법구체 +2', m: { multi: 2 } },
   { id: 'heart',  n: '불사의 심장',     d: '스테이지마다 1번, 쓰러지면 HP 50%로 부활', m: { revive: 1 } },
   { id: 'crown',  n: '탐욕의 왕관',     d: '골드 +70%, 경험치 +25%', m: { gold: 0.7, xpm: 0.25 } },

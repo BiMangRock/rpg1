@@ -21,7 +21,8 @@ function updPlayer(dt) {
   } else {
     const d = (keys[KB.R] ? 1 : 0) - (keys[KB.L] ? 1 : 0);
     const sp = T.spd * (p.b.spd ? 1.4 : 1) * (p.st === 'atk' || p.st === 'cast' ? 0.45 : 1) * (p.slowT > 0 ? 0.55 : 1);
-    p.cd -= dt; p.sc -= dt; p.inv -= dt; p.dn -= dt; p.frzCd -= dt; p.slowT -= dt;
+    p.cd -= dt; p.sc -= dt; p.inv -= dt; p.dn -= dt; p.frzCd -= dt; p.slowT -= dt; p.dashCd -= dt;
+    if (p.combo && (p.comboT -= dt) <= 0) p.combo = 0;
     // 화상 / 독 (★몬스터 특성): 0.5초마다, 무적 무시
     if (p.burnT > 0 || p.psnT > 0) {
       p.burnT -= dt; p.psnT -= dt;
@@ -33,7 +34,19 @@ function updPlayer(dt) {
       }
     }
     if (p.st === 'hurt') { p.t += dt; p.vx *= 0.92; if (p.t > 0.25) p.st = 'n'; }
-    else { p.vx = d * sp; if (d && p.st === 'n') p.face = d; }
+    else if (p.st !== 'slam') { p.vx = d * sp; if (d && p.st === 'n') p.face = d; }
+    // 돌진 베기: 앞으로 빠르게 미끄러지며 닿는 적을 관통해 벰
+    if (p.dashT > 0) {
+      p.dashT -= dt; p.vx = p.face * 950;
+      for (const e of en)
+        if (!e.dead && !p.dashHs.has(e) && Math.abs(e.x - p.x) < e.w / 2 + 34 && e.y > p.y - 100 && e.y - e.h < p.y) {
+          p.dashHs.add(e);
+          const fz = e.frz > 0;
+          hit(e, dm() * T.swd * 1.5, p.face * 300, rollCrit(), 'sw');
+          if (fz) shatter(e);
+        }
+    }
+    if (p.st === 'slam') { p.vx = 0; p.vy = Math.max(p.vy, 1300); }
     // 꾹 누르고 있으면 연속 공격
     if (p.st === 'n') {
       if (keys[KB.atk] || mb[0]) atk(mb[0]);
@@ -63,6 +76,7 @@ function updPlayer(dt) {
   else if (p.vy > 0 && p.dn <= 0)
     for (const q of pl) if (p.x > q.x && p.x < q.x + q.w && py <= q.y && p.y >= q.y) { p.y = q.y; p.vy = 0; p.g = 1; }
   if (p.g) p.jc = 0;
+  if (p.st === 'slam' && p.g) slamLand();
   cam += (cl(p.x - W / 2, 0, WW - W) - cam) * Math.min(1, dt * 6);
   camY += (cl(p.y - H * 0.62, 0, MH - H) - camY) * Math.min(1, dt * 6);
 }
@@ -89,6 +103,17 @@ function updProjectiles(dt) {
   // 플레이어 마법구체
   for (const o of pr) {
     o.x += o.vx * dt; o.y += o.vy * dt; o.life -= dt; o.a += dt;
+    if (o.rf || o.ab) {
+      // 튕겨낸 탄(rf) / 소환수 원거리 공격(ab): 첫 번째 적에게 명중
+      for (const e of en)
+        if (!o.dead && !e.dead && Math.abs(o.x - e.x) < e.w / 2 + (o.r || 6) && o.y > e.y - e.h - 6 && o.y < e.y + 6) {
+          o.dead = 1;
+          hit(e, o.dmg, Math.sign(o.vx) * 150, false, o.rf ? 'rf' : 'sm');
+          if (o.ab && o.burn && !e.dead) { e.burnT = 3; e.burnD = dm() * T.sm * 0.4; }
+        }
+      if (o.life <= 0 || o.y > GY) o.dead = 1;
+      continue;
+    }
     if (o.sw) {
       // 검기: 관통, 적마다 한 번씩
       for (const e of en)

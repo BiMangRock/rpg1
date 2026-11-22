@@ -61,12 +61,13 @@ function menu() {
     opts.push(cand.splice(Math.min(j, cand.length - 1), 1)[0]);
   }
   show(`<h1>LEVEL UP!</h1><p>Lv.${lvl} · 강화를 선택하세요 (1~3 키)</p>
-  <div class=row>${opts.map((k, i) => `<button class=up onclick="pickUp(${i})"><b>${i + 1}. ${UPGRADES[k].n}</b><small>현재 ${upc[k] || 0}단계</small></button>`).join('')}</div>`);
+  <div class=row>${opts.map((k, i) => `<button class=up onclick="pickUp(${i})"><b>${i + 1}. ${UPGRADES[k].n}</b><small>현재 ${upc[k] || 0}단계${UPGRADES[k].sum ? ` · 소환 Lv ${summonLv()}→${summonLv() + 1 + (UPGRADES[k].n.includes('숙련') ? 1 : 0)}` : ''}</small></button>`).join('')}</div>`);
 }
 function pickUp(i) {
   if (state !== 'lvl') return;
   const k = opts[i];
   UPGRADES[k].f();
+  if (UPGRADES[k].sum) S.slv++; // 소환 계열은 소환 레벨 +1
   upc[k] = (upc[k] || 0) + 1;
   recalc();
   hide(); state = 'play';
@@ -189,7 +190,8 @@ function statsHTML() {
   const rows = [
     ['공격력', T.atk.toFixed(1)], ['최대 HP', Math.round(T.maxhp)], ['공격 속도', pc(T.as)], ['이동 속도', Math.round(T.spd)],
     ['마법 위력', pc(T.mp)], ['마법구체', 1 + T.multi + '발'], ['마법 쿨타임', (MAG_CD * T.cdr).toFixed(2) + '초'],
-    ['소환수', Math.round(T.sn) + '마리'], ['소환수 강화', pc(T.sm)], ['소환 쿨타임', (SCD * T.scd).toFixed(1) + '초'],
+    ['한 번에 소환', Math.round(T.sn) + '마리'], ['최대 소환수', Math.round(T.smax) + '마리'], ['소환 레벨', `Lv.${summonLv()} (${sumDef(0).n}·${sumDef(1).n})`],
+    ['소환수 강화', pc(T.sm)], ['소환 쿨타임', (SCD * T.scd).toFixed(1) + '초'], ['검 피해', pc(T.swd)],
     ['받는 피해', (T.dr >= 0 ? '-' : '+') + pc(Math.abs(T.dr))], ['치명타', `${pc(T.crit)} (×${2 + T.critx})`], ['검 흡혈', pc(T.vamp)],
     ['처치 시 회복', T.ls], ['골드 획득', pc(T.gold)], ['최대 점프', T.mj + '단'],
   ];
@@ -204,6 +206,8 @@ function statsHTML() {
     [T.vac, '자동 획득', '켜짐'], [T.luck, '★몬스터 확률', '+' + pc(T.luck)], [T.bounty, '★몬스터 보상', '×2'],
     [T.disc, '상점 할인', pc(T.disc)], [T.freeroll, '무료 새로고침', T.freeroll + '회'], [T.clrxp, '클리어 경험치', pc(T.clrxp)],
     [T.chest, '보물상자', '항상'], [T.gkill, '처치 골드', '+' + T.gkill],
+    [T.combo, '3연타 콤보', '켜짐'], [T.slam, '내려찍기', '공중 S+공격'], [T.dash, '돌진 베기', '켜짐'],
+    [T.swkill, '검 처치 보상', '+' + pc(T.swkill)], [T.swdrop, '검 처치 장비 드롭', '+' + pc(T.swdrop)],
   ].filter((r) => r[0]).map((r) => [r[1], r[2]]);
   return `<h3>현재 능력치</h3><div class=stats>${[...rows, ...fx2].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>`;
 }

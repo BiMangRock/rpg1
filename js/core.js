@@ -22,7 +22,7 @@ let chests = [], clearMsg = '';
 // pt/rg 레벨업 이펙트, hz 바닥 위험지대, wv 퍼지는 원 이펙트
 // kq 처치 폭발 대기열, zp 번개 이펙트
 let en = [], pr = [], eb = [], dr = [], fx = [], tx = [], al = [], pt = [], rg = [], hz = [], wv = [], kq = [], zp = [];
-let lt = 0, lf = 0;
+let lt = 0, lf = 0, sTier = 0;
 const keys = {};
 let mb = {}, msx = 0, msy = 0, mon = 0;
 
@@ -42,8 +42,8 @@ const PCT_KEYS = ['atk', 'as', 'spd', 'mp', 'area', 'xpm', 'mag', 'sm', 'gold'];
 const CD_KEYS = ['cdr', 'scd'];
 
 // 장비 강화: 수치 효과는 단계마다 +25%, 개수형(마법구체·소환수·번개·점프)은 +3에서 +1
-const INT_UP = ['multi', 'sn', 'chain', 'mj', 'freeroll'];
-const NO_SCALE = ['revive', 'vac', 'frzA', 'chest', 'gdup', 'bounty', 'freeroll'];
+const INT_UP = ['multi', 'sn', 'smax', 'chain', 'mj', 'freeroll'];
+const NO_SCALE = ['revive', 'vac', 'frzA', 'chest', 'gdup', 'bounty', 'freeroll', 'combo', 'slam', 'dash', 'slv'];
 function modsOf(id) {
   const base = ITEM[id].m, L = upg[id] || 0, m = {};
   for (const k in base) {
@@ -72,7 +72,8 @@ function recalc() {
   // 기본값 → 레벨업 스탯(S)으로 덮어쓰기 → 장비·유물 더하기
   T = { gold: 1, crit: 0, critx: 0, vamp: 0, dr: 0, thorns: 0, revive: 0, dodge: 0,
         frz: 0, frzT: 0, frzB: 0, sfrz: 0, frzA: 0, burn: 0, psn: 0, chain: 0, swave: 0, exe: 0, kboom: 0,
-        gdup: 0, intr: 0, vac: 0, luck: 0, bounty: 0, disc: 0, freeroll: 0, clrxp: 0, chest: 0, gkill: 0, ...S };
+        gdup: 0, intr: 0, vac: 0, luck: 0, bounty: 0, disc: 0, freeroll: 0, clrxp: 0, chest: 0, gkill: 0,
+        combo: 0, slam: 0, dash: 0, swkill: 0, swdrop: 0, ...S };
   const add = {};
   for (const m of activeMods()) for (const k in m) add[k] = (add[k] || 0) + m[k];
   for (const k in add) {
@@ -84,12 +85,17 @@ function recalc() {
   T.crit = Math.min(0.8, T.crit);
   T.frz = Math.min(0.75, T.frz);
   T.dodge = Math.min(0.5, T.dodge);
+  // 소환 레벨이 3·5·7·9에 닿으면 소환수 진화
+  const tier = summonTier();
+  if (tier !== sTier) { sTier = tier; evolveSummons(); }
   if (p) p.hp = Math.min(p.hp, T.maxhp);
 }
 
 // ----- 새 게임 -----
 function newRun() {
-  S = { atk: 10, maxhp: 100, spd: 230, as: 1, cdr: 1, area: 1, multi: 0, ls: 0, xpm: 1, jump: 640, mag: 1, mp: 1, mj: 1, sn: 3, scd: 1, sm: 1 };
+  S = { atk: 10, maxhp: 100, spd: 230, as: 1, cdr: 1, area: 1, multi: 0, ls: 0, xpm: 1, jump: 640, mag: 1, mp: 1, mj: 1,
+        sn: 3, smax: 10, slv: 0, scd: 1, sm: 1, swd: 1, swr: 1 };
+  sTier = 0;
   lvl = 1; xp = 0; need = 6; upc = {};
   gold = 0; inv = []; relics = []; stock = []; lockd = []; upg = {}; accN = ACC_BASE;
   eq = { wpn: null, arm: null };
@@ -97,7 +103,7 @@ function newRun() {
   al = [];
   p = { x: 120, y: GY, vx: 0, vy: 0, face: 1, hp: 100, g: 1, st: 'n', t: 0, inv: 0, cd: 0, sc: 0, jc: 0,
         kind: 'mag', am: null, b: {}, hit: 0, fired: 0, dn: 0, revUsed: 0, frzCd: 0,
-        slowT: 0, burnT: 0, psnT: 0, psnS: 0, dotT: 0.5 };
+        slowT: 0, burnT: 0, psnT: 0, psnS: 0, dotT: 0.5, combo: 0, comboT: 0, dashT: 0, dashCd: 0 };
   recalc();
   p.hp = T.maxhp;
   cur = { w: 0, s: 0 };
@@ -111,12 +117,12 @@ function go() {
   p.x = 120; p.y = GY; p.vx = p.vy = 0; p.st = 'n'; p.revUsed = 0; p.inv = 1; cam = 0;
   p.slowT = p.burnT = p.psnT = 0;
   // 소환수는 다음 스테이지로 따라온다
-  for (const a of al) { a.x = p.x + a.o * 1.2; a.y = a.t === 'bat' ? p.y - 80 : GY; a.cd = 0; }
+  for (const a of al) { a.x = p.x + a.o * 1.2; a.y = a.air ? p.y - 80 : GY; a.cd = 0; }
   // 랜덤 맵
   map = genMap();
   WW = map.mw; MH = map.mh; GY = map.gy; pl = map.pl;
   p.y = GY;
-  for (const a of al) a.y = a.t === 'bat' ? p.y - 80 : GY;
+  for (const a of al) a.y = a.air ? p.y - 80 : GY;
   cam = cl(p.x - W / 2, 0, WW - W);
   camY = cl(p.y - H * 0.62, 0, MH - H);
   ban = { s: `${stageLabel()} · ${stageDef().n}${map.name ? ` (${map.name})` : ''}`, t: 2.5 };

@@ -173,6 +173,10 @@ function drawStatus(e) {
     g.strokeStyle = '#e0f6ff'; g.lineWidth = 2; g.strokeRect(sx - e.w * 0.6, e.y - e.h - 4, e.w * 1.2, e.h + 4);
     g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(sx - e.w * 0.45, e.y - e.h + 2, 4, e.h * 0.5);
   }
+  if (e.stn > 0) {
+    g.font = '14px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffe680';
+    g.fillText('✦ 기절 ✦', sx + Math.sin(time * 10) * 4, e.y - e.h - 12); g.textAlign = 'left';
+  }
   if (e.psnT > 0 && e.psnS > 1) {
     g.font = '13px "Do Hyeon",sans-serif'; g.textAlign = 'center'; g.fillStyle = '#9aff5a';
     g.fillText('☠' + e.psnS, sx + e.w * 0.6 + 6, e.y - e.h + 4); g.textAlign = 'left';
@@ -312,23 +316,98 @@ function drawHazards() {
   }
 }
 
-// ----- 소환수 -----
+// ----- 소환수 (소환 레벨에 따라 5단계 진화) -----
 function drawA(a) {
-  g.save(); g.translate(a.x - cam, a.y);
-  g.fillStyle = a.fl > 0 ? '#fff' : '#b06aff';
-  if (a.t === 'bat') {
-    const f = Math.sin(a.ph * 3) * 14;
-    g.beginPath(); g.moveTo(0, -15); g.lineTo(-28, -15 - f); g.lineTo(-14, -4); g.moveTo(0, -15); g.lineTo(28, -15 - f); g.lineTo(14, -4); g.fill();
-    g.beginPath(); g.arc(0, -14, 10, 0, 7); g.fill();
-    g.fillStyle = '#ff3'; g.fillRect(-6, -17, 4, 4); g.fillRect(2, -17, 4, 4);
-  } else {
-    const ry = (a.h / 2) * (1 + Math.sin(a.ph * 2) * 0.1);
-    g.beginPath(); g.ellipse(0, -ry, a.w / 2, ry, 0, 0, 7); g.fill();
-    g.fillStyle = '#fff'; g.fillRect(-9, -a.h * 0.62, 8, 8); g.fillRect(3, -a.h * 0.62, 8, 8);
-    g.fillStyle = '#d11'; g.fillRect(a.dir > 0 ? -4 : -9, -a.h * 0.58, 4, 4); g.fillRect(a.dir > 0 ? 8 : 3, -a.h * 0.58, 4, 4);
+  const w = a.w, h = a.h, f = a.fl > 0, t = a.ph;
+  const P = (c) => (g.fillStyle = f ? '#fff' : c);
+  g.save(); g.translate(a.x - cam, a.y); g.scale(a.dir, 1);
+  const eye = (x, y, c, s = 4) => { g.fillStyle = c; g.fillRect(x, y, s, s); };
+  const wings = (span, col, flap) => {
+    P(col); const fl = Math.sin(t * flap) * h * 0.5;
+    g.beginPath(); g.moveTo(0, -h * 0.6); g.lineTo(-span, -h * 0.6 - fl); g.lineTo(-span * 0.5, -h * 0.25); g.fill();
+    g.beginPath(); g.moveTo(0, -h * 0.6); g.lineTo(span, -h * 0.6 - fl); g.lineTo(span * 0.5, -h * 0.25); g.fill();
+  };
+  switch (a.k) {
+    case 'slime': {
+      const ry = (h / 2) * (1 + Math.sin(t * 2) * 0.1);
+      P('#b06aff'); g.beginPath(); g.ellipse(0, -ry, w / 2, ry, 0, 0, 7); g.fill();
+      g.fillStyle = '#fff'; g.fillRect(-2, -h * 0.62, 8, 8); g.fillRect(8, -h * 0.62, 8, 8);
+      eye(3, -h * 0.58, '#d11'); eye(12, -h * 0.58, '#d11'); break;
+    }
+    case 'bat': {
+      wings(28, '#b06aff', 9);
+      P('#b06aff'); g.beginPath(); g.arc(0, -h * 0.55, 10, 0, 7); g.fill();
+      eye(-6, -h * 0.65, '#ff3'); eye(2, -h * 0.65, '#ff3'); break;
+    }
+    case 'skel': {
+      const wk = Math.sin(t * 6) * 4;
+      P('#e8e0d0'); g.fillRect(-8 + wk, -h * 0.35, 5, h * 0.35); g.fillRect(3 - wk, -h * 0.35, 5, h * 0.35);
+      g.fillRect(-9, -h * 0.72, 18, h * 0.38);
+      g.fillStyle = '#2a1a34'; for (let i = 0; i < 3; i++) g.fillRect(-7, -h * 0.66 + i * 6, 14, 2);
+      P('#e8e0d0'); g.beginPath(); g.arc(0, -h * 0.84, 9, 0, 7); g.fill();
+      eye(1, -h * 0.88, '#b06aff', 4);
+      g.strokeStyle = '#c0c8d8'; g.lineWidth = 3; g.beginPath(); g.moveTo(10, -h * 0.5); g.lineTo(24, -h * 0.95); g.stroke(); break;
+    }
+    case 'crow': {
+      g.save(); g.globalAlpha = 0.85; wings(30, '#2a2a4a', 10);
+      P('#1a1a30'); g.beginPath(); g.ellipse(0, -h * 0.55, 13, 9, 0, 0, 7); g.fill();
+      P('#e0a020'); g.beginPath(); g.moveTo(12, -h * 0.6); g.lineTo(22, -h * 0.55); g.lineTo(12, -h * 0.5); g.fill();
+      g.restore(); eye(4, -h * 0.66, '#7ae8ff'); break;
+    }
+    case 'hound': {
+      const wk = Math.sin(t * 9) * 5;
+      g.save(); g.globalCompositeOperation = 'lighter'; glow(0, -h * 0.5, w * 0.8, '255,90,30', 0.35); g.restore();
+      P('#3a1010'); g.fillRect(-w * 0.4 + wk, -h * 0.3, 6, h * 0.3); g.fillRect(w * 0.25 - wk, -h * 0.3, 6, h * 0.3);
+      P('#5a1a14'); g.beginPath(); g.ellipse(0, -h * 0.5, w * 0.45, h * 0.28, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(w * 0.42, -h * 0.7, w * 0.2, h * 0.2, 0, 0, 7); g.fill();
+      P('#ff7a2a'); g.beginPath(); g.moveTo(-w * 0.4, -h * 0.6); g.lineTo(-w * 0.65, -h * 0.9 - Math.sin(t * 12) * 5); g.lineTo(-w * 0.35, -h * 0.45); g.fill();
+      eye(w * 0.45, -h * 0.78, '#ffd24a'); break;
+    }
+    case 'garg': {
+      wings(32, '#6a6a7a', 6);
+      P('#8a8a98'); g.beginPath(); g.ellipse(0, -h * 0.5, 14, 16, 0, 0, 7); g.fill();
+      P('#6a6a7a'); g.beginPath(); g.moveTo(-8, -h * 0.85); g.lineTo(-4, -h * 1.05); g.lineTo(0, -h * 0.85); g.moveTo(4, -h * 0.85); g.lineTo(8, -h * 1.05); g.lineTo(10, -h * 0.82); g.fill();
+      eye(3, -h * 0.66, '#c08aff', 5); break;
+    }
+    case 'knight': {
+      const wk = Math.sin(t * 5) * 4;
+      g.save(); g.globalCompositeOperation = 'lighter'; glow(0, -h * 0.5, w, '160,90,255', 0.25); g.restore();
+      P('#1a1424'); g.fillRect(-w * 0.3 + wk, -h * 0.36, w * 0.22, h * 0.36); g.fillRect(w * 0.08 - wk, -h * 0.36, w * 0.22, h * 0.36);
+      P('#2a2238'); g.fillRect(-w * 0.42, -h * 0.78, w * 0.84, h * 0.44);
+      P('#7a3ac0'); g.fillRect(-w * 0.48, -h * 0.8, w * 0.96, 5);
+      P('#2a2238'); g.fillRect(-w * 0.26, -h * 1.0, w * 0.52, h * 0.22);
+      eye(-2, -h * 0.92, '#c08aff', 10);
+      g.strokeStyle = '#9a7ae8'; g.lineWidth = 5; g.beginPath(); g.moveTo(w * 0.4, -h * 0.4); g.lineTo(w * 0.95, -h * 1.05); g.stroke(); break;
+    }
+    case 'wyvern': {
+      wings(42, '#3a6a4a', 7);
+      P('#4a8a5a'); g.beginPath(); g.ellipse(0, -h * 0.5, 22, 11, 0, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(16, -h * 0.55); g.lineTo(34, -h * 0.7); g.lineTo(34, -h * 0.45); g.fill();
+      g.beginPath(); g.moveTo(-18, -h * 0.5); g.lineTo(-38, -h * 0.35 + Math.sin(t * 4) * 5); g.lineTo(-18, -h * 0.4); g.fill();
+      eye(26, -h * 0.66, '#ffd24a'); break;
+    }
+    case 'golem': {
+      const wk = Math.sin(t * 3) * 3;
+      g.save(); g.globalCompositeOperation = 'lighter'; glow(0, -h * 0.5, w, '140,80,255', 0.3); g.restore();
+      P('#3a3448'); g.fillRect(-w * 0.35 + wk, -h * 0.3, w * 0.25, h * 0.3); g.fillRect(w * 0.1 - wk, -h * 0.3, w * 0.25, h * 0.3);
+      P('#4a4458'); g.fillRect(-w * 0.45, -h * 0.82, w * 0.9, h * 0.54);
+      g.fillRect(-w * 0.62, -h * 0.78, w * 0.2, h * 0.5); g.fillRect(w * 0.42, -h * 0.78, w * 0.2, h * 0.5);
+      P('#4a4458'); g.fillRect(-w * 0.2, -h * 1.0, w * 0.4, h * 0.2);
+      g.fillStyle = '#b06aff'; g.fillRect(-4, -h * 0.66, 8, h * 0.3); g.fillRect(-w * 0.2, -h * 0.54, w * 0.4, 5);
+      eye(-6, -h * 0.94, '#e0b0ff', 5); eye(4, -h * 0.94, '#e0b0ff', 5); break;
+    }
+    case 'dragon': {
+      g.save(); g.globalCompositeOperation = 'lighter'; glow(0, -h * 0.5, w * 0.7, '160,60,255', 0.3); g.restore();
+      wings(58, '#2a1a3a', 5);
+      P('#3a2448'); g.beginPath(); g.ellipse(0, -h * 0.5, 30, 15, 0, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(22, -h * 0.6); g.lineTo(48, -h * 0.85); g.lineTo(54, -h * 0.6); g.lineTo(26, -h * 0.4); g.fill();
+      g.beginPath(); g.moveTo(-26, -h * 0.5); g.lineTo(-56, -h * 0.3 + Math.sin(t * 3) * 6); g.lineTo(-26, -h * 0.38); g.fill();
+      P('#c08aff'); g.beginPath(); g.moveTo(40, -h * 0.85); g.lineTo(36, -h * 1.05); g.lineTo(46, -h * 0.85); g.fill();
+      eye(44, -h * 0.76, '#ff4aff', 5); break;
+    }
   }
   g.restore();
-  if (a.hp < a.mh && a.life > 0) bar(a.x - cam - 18, a.y - (a.t === 'bat' ? 40 : a.h + 12), 36, 4, a.hp / a.mh, '#b06aff');
+  if (a.hp < a.mh && a.life > 0) bar(a.x - cam - 18, a.y - h - 12, 36, 4, a.hp / a.mh, '#b06aff');
 }
 
 // ----- 플레이어 -----
@@ -338,6 +417,7 @@ function drawP() {
   if (p.st === 'dead') { a = FR.hurt; i = Math.min(5, (p.t / 0.22) | 0); }
   else if (p.st === 'hurt') { a = FR.hurt; i = 0; }
   else if (p.st === 'atk') { a = FR.atk; i = Math.min(4, (p.t / (0.055 / asm())) | 0); }
+  else if (p.st === 'slam') { a = FR.atk; i = 2; }
   else if (p.st === 'cast') { a = FR.cast; i = Math.min(5, (p.t / (0.085 / asm())) | 0); }
   else if (!p.g) { a = FR.walk; i = 2; }
   else if (Math.abs(p.vx) > 10) { a = FR.walk; i = ((t / 0.09) | 0) % a.length; }
@@ -443,6 +523,13 @@ function draw() {
   for (const a of al) drawA(a);
   drawP();
   for (const o of pr) {
+    if (o.rf || o.ab) {
+      g.save(); g.globalCompositeOperation = 'lighter';
+      glow(o.x - cam, o.y, (o.r || 6) * 2.6, hexRgb(o.c), 0.8);
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(o.x - cam, o.y, (o.r || 6) * 0.5, 0, 7); g.fill();
+      g.restore();
+      continue;
+    }
     if (o.sw) {
       // 검기: 초승달
       g.save(); g.globalCompositeOperation = 'lighter'; g.translate(o.x - cam, o.y); g.scale(o.f, 1);
@@ -518,7 +605,16 @@ function hud() {
   g.fillText(`${stageLabel()} ${c.n}${isBossStage() || portal ? '' : '  처치 ' + Math.min(kills, c.q) + '/' + c.q}`, 16, 68);
   bar(16, 80, 60, 6, 1 - Math.max(0, p.cd) / (MAG_CD * T.cdr), '#c88aff'); g.fillStyle = '#fff'; g.fillText('우클릭 마법', 82, 88);
   bar(16, 98, 60, 6, 1 - Math.max(0, p.sc) / (SCD * T.scd), '#6aff9a'); g.fillStyle = '#fff';
-  g.fillText(`${kl(KB.sum)} 소환 ${p.sc > 0 ? Math.ceil(p.sc) + '초' : '준비'}  (${al.length}/${MAXA})`, 82, 106);
+  g.fillText(`${kl(KB.sum)} 소환 ${p.sc > 0 ? Math.ceil(p.sc) + '초' : '준비'}  (${al.length}/${Math.round(T.smax)}) · 소환 Lv.${summonLv()} ${sumDef(0).n}`, 82, 106);
+  if (p.combo > 1) {
+    g.font = '28px "Do Hyeon",sans-serif'; g.textAlign = 'center';
+    g.fillStyle = '#000'; g.fillText(`${p.combo} COMBO`, W / 2 + 2, H - 78);
+    g.fillStyle = p.combo % 3 === 2 ? '#ffd24a' : '#fff'; g.fillText(`${p.combo} COMBO`, W / 2, H - 80);
+    g.font = '13px "Do Hyeon",sans-serif'; g.fillStyle = '#ffffffaa';
+    g.fillText(`검 피해 +${Math.min(100, (p.combo - 1) * 10)}%${p.combo % 3 === 2 ? ' · 다음 타격 강타!' : ''}`, W / 2, H - 62);
+    g.textAlign = 'left';
+  }
+  g.font = '16px "Do Hyeon",sans-serif';
   g.font = '13px "Do Hyeon",sans-serif'; g.fillStyle = '#ffffff99'; g.fillText(`${kl(KB.inv)} 장비창 · Esc 일시정지`, 16, H - 12);
   g.font = '16px "Do Hyeon",sans-serif'; g.fillStyle = '#fff';
   // 상태이상 표시
